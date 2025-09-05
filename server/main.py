@@ -375,6 +375,222 @@ def cleanup_old_data(admin=Depends(verify_admin_token), db: Session = Depends(ge
         "deleted_screenshots": deleted_screenshots
     }
 
+# Enhanced reporting endpoints
+@app.get("/api/admin/reports/daily")
+def get_daily_report(
+    date: Optional[str] = None,
+    admin=Depends(verify_admin_token),
+    db: Session = Depends(get_db)
+):
+    """Get daily activity report for all employees"""
+    if date:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    else:
+        target_date = datetime.utcnow().date()
+    
+    start_of_day = datetime.combine(target_date, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+    
+    # Get all employees who were active on this date
+    employees_with_activity = db.query(EmployeeHeartbeat.username).filter(
+        EmployeeHeartbeat.timestamp >= start_of_day,
+        EmployeeHeartbeat.timestamp < end_of_day
+    ).distinct().all()
+    
+    report_data = []
+    total_hours = 0
+    
+    for (username,) in employees_with_activity:
+        # Get working hours
+        heartbeats = db.query(EmployeeHeartbeat).filter(
+            EmployeeHeartbeat.username == username,
+            EmployeeHeartbeat.timestamp >= start_of_day,
+            EmployeeHeartbeat.timestamp < end_of_day
+        ).order_by(EmployeeHeartbeat.timestamp).all()
+        
+        if heartbeats:
+            first_heartbeat = heartbeats[0].timestamp
+            last_heartbeat = heartbeats[-1].timestamp
+            hours_worked = (last_heartbeat - first_heartbeat).total_seconds() / 3600
+            total_hours += hours_worked
+            
+            # Get detailed logs count
+            logs_count = db.query(EmployeeLog).filter(
+                EmployeeLog.username == username,
+                EmployeeLog.timestamp >= start_of_day,
+                EmployeeLog.timestamp < end_of_day
+            ).count()
+            
+            report_data.append({
+                "username": username,
+                "hours_worked": round(hours_worked, 2),
+                "first_activity": first_heartbeat,
+                "last_activity": last_heartbeat,
+                "heartbeats_count": len(heartbeats),
+                "logs_count": logs_count
+            })
+    
+    return {
+        "date": target_date.isoformat(),
+        "total_employees_active": len(report_data),
+        "total_hours_worked": round(total_hours, 2),
+        "average_hours_per_employee": round(total_hours / len(report_data), 2) if report_data else 0,
+        "employees": report_data
+    }
+
+@app.get("/api/admin/reports/weekly")
+def get_weekly_report(
+    start_date: Optional[str] = None,
+    admin=Depends(verify_admin_token),
+    db: Session = Depends(get_db)
+):
+    """Get weekly activity report for all employees"""
+    if start_date:
+        week_start = datetime.strptime(start_date, "%Y-%m-%d").date()
+    else:
+        today = datetime.utcnow().date()
+        week_start = today - timedelta(days=today.weekday())
+    
+    week_end = week_start + timedelta(days=7)
+    start_datetime = datetime.combine(week_start, datetime.min.time())
+    end_datetime = datetime.combine(week_end, datetime.min.time())
+    
+    # Get all employees with activity in this week
+    employees_with_activity = db.query(EmployeeHeartbeat.username).filter(
+        EmployeeHeartbeat.timestamp >= start_datetime,
+        EmployeeHeartbeat.timestamp < end_datetime
+    ).distinct().all()
+    
+    report_data = []
+    
+    for (username,) in employees_with_activity:
+        daily_data = []
+        total_week_hours = 0
+        
+        # Get data for each day of the week
+        for day_offset in range(7):
+            current_date = week_start + timedelta(days=day_offset)
+            day_start = datetime.combine(current_date, datetime.min.time())
+            day_end = day_start + timedelta(days=1)
+            
+            heartbeats = db.query(EmployeeHeartbeat).filter(
+                EmployeeHeartbeat.username == username,
+                EmployeeHeartbeat.timestamp >= day_start,
+                EmployeeHeartbeat.timestamp < day_end
+            ).order_by(EmployeeHeartbeat.timestamp).all()
+            
+            if heartbeats:
+                first_heartbeat = heartbeats[0].timestamp
+                last_heartbeat = heartbeats[-1].timestamp
+                day_hours = (last_heartbeat - first_heartbeat).total_seconds() / 3600
+                total_week_hours += day_hours
+                
+                daily_data.append({
+                    "date": current_date.isoformat(),
+                    "hours_worked": round(day_hours, 2),
+                    "heartbeats_count": len(heartbeats)
+                })
+            else:
+                daily_data.append({
+                    "date": current_date.isoformat(),
+                    "hours_worked": 0,
+                    "heartbeats_count": 0
+                })
+        
+        report_data.append({
+            "username": username,
+            "total_hours": round(total_week_hours, 2),
+            "average_daily_hours": round(total_week_hours / 7, 2),
+            "daily_breakdown": daily_data
+        })
+    
+    return {
+        "week_start": week_start.isoformat(),
+        "week_end": (week_end - timedelta(days=1)).isoformat(),
+        "total_employees": len(report_data),
+        "employees": report_data
+    }
+
+@app.get("/api/admin/reports/range")
+def get_range_report(
+    start_date: str,
+    end_date: str,
+    admin=Depends(verify_admin_token),
+    db: Session = Depends(get_db)
+):
+    """Get activity report for custom date range"""
+    start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
+    end_datetime = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+    
+    # Get summary statistics
+    total_heartbeats = db.query(EmployeeHeartbeat).filter(
+        EmployeeHeartbeat.timestamp >= start_datetime,
+        EmployeeHeartbeat.timestamp < end_datetime
+    ).count()
+    
+    total_logs = db.query(EmployeeLog).filter(
+        EmployeeLog.timestamp >= start_datetime,
+        EmployeeLog.timestamp < end_datetime
+    ).count()
+    
+    unique_employees = db.query(EmployeeHeartbeat.username).filter(
+        EmployeeHeartbeat.timestamp >= start_datetime,
+        EmployeeHeartbeat.timestamp < end_datetime
+    ).distinct().count()
+    
+    # Get per-employee breakdown
+    employees_with_activity = db.query(EmployeeHeartbeat.username).filter(
+        EmployeeHeartbeat.timestamp >= start_datetime,
+        EmployeeHeartbeat.timestamp < end_datetime
+    ).distinct().all()
+    
+    employee_data = []
+    
+    for (username,) in employees_with_activity:
+        heartbeats = db.query(EmployeeHeartbeat).filter(
+            EmployeeHeartbeat.username == username,
+            EmployeeHeartbeat.timestamp >= start_datetime,
+            EmployeeHeartbeat.timestamp < end_datetime
+        ).order_by(EmployeeHeartbeat.timestamp).all()
+        
+        logs_count = db.query(EmployeeLog).filter(
+            EmployeeLog.username == username,
+            EmployeeLog.timestamp >= start_datetime,
+            EmployeeLog.timestamp < end_datetime
+        ).count()
+        
+        if heartbeats:
+            first_activity = heartbeats[0].timestamp
+            last_activity = heartbeats[-1].timestamp
+            
+            # Calculate total active time (sum of gaps < 15 minutes)
+            active_time = 0
+            for i in range(len(heartbeats) - 1):
+                gap = (heartbeats[i + 1].timestamp - heartbeats[i].timestamp).total_seconds()
+                if gap <= 900:  # 15 minutes or less
+                    active_time += gap
+            
+            employee_data.append({
+                "username": username,
+                "heartbeats_count": len(heartbeats),
+                "logs_count": logs_count,
+                "estimated_active_hours": round(active_time / 3600, 2),
+                "first_activity": first_activity,
+                "last_activity": last_activity
+            })
+    
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "duration_days": (end_datetime - start_datetime).days,
+        "summary": {
+            "total_heartbeats": total_heartbeats,
+            "total_logs": total_logs,
+            "unique_employees": unique_employees
+        },
+        "employees": employee_data
+    }
+
 # Admin dashboard with proper navigation and sections
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
@@ -638,6 +854,169 @@ def dashboard():
                 color: #721c24;
                 border: 1px solid #f5c6cb;
             }
+            
+            /* Enhanced UI Styles */
+            .search-filter-bar {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                margin-bottom: 20px;
+                display: flex;
+                gap: 15px;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            
+            .search-box {
+                flex: 1;
+                min-width: 200px;
+            }
+            
+            .search-box input {
+                width: 100%;
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            
+            .filter-select {
+                min-width: 150px;
+            }
+            
+            .filter-select select {
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                background: white;
+                font-size: 14px;
+            }
+            
+            .date-picker {
+                display: flex;
+                gap: 10px;
+                align-items: center;
+            }
+            
+            .date-picker input {
+                padding: 8px 12px;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            
+            .report-tabs {
+                display: flex;
+                border-bottom: 1px solid #ddd;
+                margin-bottom: 20px;
+            }
+            
+            .report-tab {
+                padding: 12px 20px;
+                background: none;
+                border: none;
+                cursor: pointer;
+                font-size: 14px;
+                color: #666;
+                border-bottom: 3px solid transparent;
+                transition: all 0.3s;
+            }
+            
+            .report-tab.active {
+                color: #007bff;
+                border-bottom-color: #007bff;
+            }
+            
+            .report-tab:hover {
+                color: #007bff;
+                background: #f8f9fa;
+            }
+            
+            .chart-container {
+                background: white;
+                padding: 20px;
+                border-radius: 5px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                margin-bottom: 20px;
+            }
+            
+            .progress-bar {
+                width: 100%;
+                height: 20px;
+                background: #f8f9fa;
+                border-radius: 10px;
+                overflow: hidden;
+                position: relative;
+            }
+            
+            .progress-fill {
+                height: 100%;
+                transition: width 0.3s;
+                border-radius: 10px;
+            }
+            
+            .progress-text {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                font-size: 12px;
+                font-weight: bold;
+                color: #333;
+            }
+            
+            .export-buttons {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            
+            .summary-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+                gap: 15px;
+                margin-bottom: 20px;
+            }
+            
+            .summary-card {
+                background: white;
+                padding: 15px;
+                border-radius: 5px;
+                border: 1px solid #ddd;
+                text-align: center;
+            }
+            
+            .summary-card h4 {
+                margin: 0 0 10px 0;
+                color: #333;
+                font-size: 18px;
+            }
+            
+            .summary-card .value {
+                font-size: 24px;
+                font-weight: bold;
+                color: #007bff;
+            }
+            
+            .employee-card {
+                background: white;
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                padding: 15px;
+                margin-bottom: 10px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            
+            .employee-info {
+                flex: 1;
+            }
+            
+            .employee-actions {
+                display: flex;
+                gap: 5px;
+            }
         </style>
     </head>
     <body>
@@ -670,6 +1049,7 @@ def dashboard():
                 <ul class="nav-menu">
                     <li><a href="#" onclick="showSection('dashboard')" class="active">📊 Dashboard</a></li>
                     <li><a href="#" onclick="showSection('users')">👥 Employees</a></li>
+                    <li><a href="#" onclick="showSection('reports')">📈 Reports</a></li>
                     <li><a href="#" onclick="showSection('agent')">💾 Agent Download</a></li>
                     <li><a href="#" onclick="showSection('settings')">⚙️ Settings</a></li>
                     <li><a href="#" onclick="logout()">🚪 Logout</a></li>
@@ -719,7 +1099,85 @@ def dashboard():
                         <h3>Employee Management</h3>
                         <button class="btn btn-success" onclick="refreshEmployees()">🔄 Refresh</button>
                     </div>
+                    
+                    <!-- Search and Filter Bar -->
+                    <div class="search-filter-bar">
+                        <div class="search-box">
+                            <input type="text" id="employeeSearch" placeholder="Search employees by name or hostname..." oninput="filterEmployees()">
+                        </div>
+                        <div class="filter-select">
+                            <select id="statusFilter" onchange="filterEmployees()">
+                                <option value="">All Status</option>
+                                <option value="online">Online</option>
+                                <option value="offline">Offline</option>
+                            </select>
+                        </div>
+                        <div class="filter-select">
+                            <select id="sortBy" onchange="sortEmployees()">
+                                <option value="name">Sort by Name</option>
+                                <option value="status">Sort by Status</option>
+                                <option value="lastSeen">Sort by Last Seen</option>
+                                <option value="location">Sort by Location</option>
+                            </select>
+                        </div>
+                    </div>
+                    
                     <div id="employeesList">Loading employees...</div>
+                </div>
+                
+                <!-- Reports Section -->
+                <div id="reportsSection" class="content-section">
+                    <h3>Reports & Analytics</h3>
+                    
+                    <!-- Report Tabs -->
+                    <div class="report-tabs">
+                        <button class="report-tab active" onclick="showReportTab('daily')">Daily Reports</button>
+                        <button class="report-tab" onclick="showReportTab('weekly')">Weekly Reports</button>
+                        <button class="report-tab" onclick="showReportTab('monthly')">Monthly Reports</button>
+                        <button class="report-tab" onclick="showReportTab('custom')">Custom Range</button>
+                    </div>
+                    
+                    <!-- Daily Reports Tab -->
+                    <div id="dailyReportTab" class="report-content active">
+                        <div class="date-picker">
+                            <label>Select Date:</label>
+                            <input type="date" id="dailyDate" onchange="loadDailyReport()">
+                            <button class="btn btn-primary-sm" onclick="loadDailyReport()">Generate Report</button>
+                        </div>
+                        <div id="dailyReportContent"></div>
+                    </div>
+                    
+                    <!-- Weekly Reports Tab -->
+                    <div id="weeklyReportTab" class="report-content" style="display: none;">
+                        <div class="date-picker">
+                            <label>Select Week Starting:</label>
+                            <input type="date" id="weeklyDate" onchange="loadWeeklyReport()">
+                            <button class="btn btn-primary-sm" onclick="loadWeeklyReport()">Generate Report</button>
+                        </div>
+                        <div id="weeklyReportContent"></div>
+                    </div>
+                    
+                    <!-- Monthly Reports Tab -->
+                    <div id="monthlyReportTab" class="report-content" style="display: none;">
+                        <div class="date-picker">
+                            <label>Select Month:</label>
+                            <input type="month" id="monthlyDate" onchange="loadMonthlyReport()">
+                            <button class="btn btn-primary-sm" onclick="loadMonthlyReport()">Generate Report</button>
+                        </div>
+                        <div id="monthlyReportContent"></div>
+                    </div>
+                    
+                    <!-- Custom Range Tab -->
+                    <div id="customReportTab" class="report-content" style="display: none;">
+                        <div class="date-picker">
+                            <label>From:</label>
+                            <input type="date" id="customFromDate">
+                            <label>To:</label>
+                            <input type="date" id="customToDate">
+                            <button class="btn btn-primary-sm" onclick="loadCustomReport()">Generate Report</button>
+                        </div>
+                        <div id="customReportContent"></div>
+                    </div>
                 </div>
                 
                 <!-- Agent Download Section -->
@@ -808,12 +1266,28 @@ def dashboard():
         <script>
             let authToken = localStorage.getItem('adminToken') || '';
             let currentSection = 'dashboard';
+            let allEmployees = [];
+            let filteredEmployees = [];
+            let currentReportTab = 'daily';
             
             // Check if already logged in
             if (authToken) {
                 showDashboard();
                 loadDashboardData();
             }
+            
+            // Set default dates
+            document.addEventListener('DOMContentLoaded', function() {
+                const today = new Date().toISOString().split('T')[0];
+                const thisWeek = new Date();
+                thisWeek.setDate(thisWeek.getDate() - thisWeek.getDay());
+                const weekStart = thisWeek.toISOString().split('T')[0];
+                const thisMonth = new Date().toISOString().substr(0, 7);
+                
+                if(document.getElementById('dailyDate')) document.getElementById('dailyDate').value = today;
+                if(document.getElementById('weeklyDate')) document.getElementById('weeklyDate').value = weekStart;
+                if(document.getElementById('monthlyDate')) document.getElementById('monthlyDate').value = thisMonth;
+            });
             
             async function login(event) {
                 event.preventDefault();
@@ -910,6 +1384,7 @@ def dashboard():
                 const titles = {
                     'dashboard': 'Dashboard',
                     'users': 'Employee Management', 
+                    'reports': 'Reports & Analytics',
                     'agent': 'Agent Download',
                     'settings': 'System Settings'
                 };
@@ -922,6 +1397,9 @@ def dashboard():
                     loadEmployees();
                 } else if (section === 'dashboard') {
                     loadDashboardData();
+                } else if (section === 'reports') {
+                    // Load current report tab by default
+                    if (currentReportTab === 'daily') loadDailyReport();
                 }
             }
             
@@ -1033,7 +1511,9 @@ def dashboard():
                             </table>
                         `;
                         
-                        document.getElementById('employeesList').innerHTML = employees.length ? tableHtml : '<p>No employees found</p>';
+                        allEmployees = employees;
+                        filteredEmployees = [...employees];
+                        displayEmployees(filteredEmployees);
                     } else if (response === null) {
                         // Token expired, user was redirected to login
                         return;
@@ -1045,8 +1525,360 @@ def dashboard():
                 }
             }
             
+            function displayEmployees(employees) {
+                const tableHtml = `
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Employee</th>
+                                <th>Hostname</th>
+                                <th>Status</th>
+                                <th>Public IP</th>
+                                <th>Location</th>
+                                <th>Last Seen</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${employees.map(emp => `
+                                <tr>
+                                    <td><strong>${emp.username}</strong></td>
+                                    <td>${emp.hostname}</td>
+                                    <td class="${emp.status === 'online' ? 'status-online' : 'status-offline'}">
+                                        ${emp.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+                                    </td>
+                                    <td>${emp.public_ip}</td>
+                                    <td>
+                                        <div style="font-size: 12px;">
+                                            <div>🏙️ ${emp.city}, ${emp.state}</div>
+                                            <div>🌍 ${emp.country}</div>
+                                        </div>
+                                    </td>
+                                    <td>${new Date(emp.last_seen).toLocaleString()}</td>
+                                    <td>
+                                        <button class="btn btn-primary-sm" onclick="viewEmployeeLogs('${emp.username}')">View Logs</button>
+                                        <button class="btn btn-success" onclick="viewWorkingHours('${emp.username}')">Working Hours</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                `;
+                
+                document.getElementById('employeesList').innerHTML = employees.length ? tableHtml : '<p>No employees found</p>';
+            }
+            
+            function filterEmployees() {
+                const searchTerm = document.getElementById('employeeSearch').value.toLowerCase();
+                const statusFilter = document.getElementById('statusFilter').value;
+                
+                filteredEmployees = allEmployees.filter(emp => {
+                    const matchesSearch = emp.username.toLowerCase().includes(searchTerm) || 
+                                        emp.hostname.toLowerCase().includes(searchTerm);
+                    const matchesStatus = !statusFilter || emp.status === statusFilter;
+                    return matchesSearch && matchesStatus;
+                });
+                
+                sortEmployees();
+            }
+            
+            function sortEmployees() {
+                const sortBy = document.getElementById('sortBy').value;
+                
+                filteredEmployees.sort((a, b) => {
+                    switch(sortBy) {
+                        case 'name':
+                            return a.username.localeCompare(b.username);
+                        case 'status':
+                            return a.status.localeCompare(b.status);
+                        case 'lastSeen':
+                            return new Date(b.last_seen) - new Date(a.last_seen);
+                        case 'location':
+                            return a.city.localeCompare(b.city);
+                        default:
+                            return 0;
+                    }
+                });
+                
+                displayEmployees(filteredEmployees);
+            }
+            
             function refreshEmployees() {
                 loadEmployees();
+            }
+            
+            // Report Tab Functions
+            function showReportTab(tabName) {
+                // Update tab styling
+                document.querySelectorAll('.report-tab').forEach(tab => tab.classList.remove('active'));
+                event.target.classList.add('active');
+                
+                // Hide all tab content
+                document.querySelectorAll('.report-content').forEach(content => content.style.display = 'none');
+                
+                // Show selected tab content
+                document.getElementById(tabName + 'ReportTab').style.display = 'block';
+                
+                currentReportTab = tabName;
+            }
+            
+            async function loadDailyReport() {
+                const date = document.getElementById('dailyDate').value;
+                if (!date) return;
+                
+                try {
+                    const response = await makeAuthenticatedRequest(`/api/admin/reports/daily?date=${date}`);
+                    
+                    if (response && response.ok) {
+                        const data = await response.json();
+                        
+                        let reportHtml = `
+                            <div class="export-buttons">
+                                <button class="btn btn-success" onclick="exportReport('daily', '${date}')">📊 Export CSV</button>
+                            </div>
+                            
+                            <div class="summary-grid">
+                                <div class="summary-card">
+                                    <h4>Active Employees</h4>
+                                    <div class="value">${data.total_employees_active}</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Total Hours</h4>
+                                    <div class="value">${data.total_hours_worked}h</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Avg Hours/Employee</h4>
+                                    <div class="value">${data.average_hours_per_employee}h</div>
+                                </div>
+                            </div>
+                            
+                            <div class="chart-container">
+                                <h4>Employee Activity - ${data.date}</h4>
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Employee</th>
+                                            <th>Hours Worked</th>
+                                            <th>Progress</th>
+                                            <th>First Activity</th>
+                                            <th>Last Activity</th>
+                                            <th>Heartbeats</th>
+                                            <th>Logs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.employees.map(emp => {
+                                            const percentage = Math.min((emp.hours_worked / 8) * 100, 100);
+                                            const progressColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
+                                            
+                                            return `
+                                                <tr>
+                                                    <td><strong>${emp.username}</strong></td>
+                                                    <td>${emp.hours_worked}h</td>
+                                                    <td>
+                                                        <div class="progress-bar" style="width: 100px;">
+                                                            <div class="progress-fill" style="width: ${percentage}%; background: ${progressColor};"></div>
+                                                            <div class="progress-text">${Math.round(percentage)}%</div>
+                                                        </div>
+                                                    </td>
+                                                    <td>${new Date(emp.first_activity).toLocaleTimeString()}</td>
+                                                    <td>${new Date(emp.last_activity).toLocaleTimeString()}</td>
+                                                    <td>${emp.heartbeats_count}</td>
+                                                    <td>${emp.logs_count}</td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        document.getElementById('dailyReportContent').innerHTML = reportHtml;
+                    }
+                } catch (error) {
+                    document.getElementById('dailyReportContent').innerHTML = '<p>Error loading report</p>';
+                }
+            }
+            
+            async function loadWeeklyReport() {
+                const startDate = document.getElementById('weeklyDate').value;
+                if (!startDate) return;
+                
+                try {
+                    const response = await makeAuthenticatedRequest(`/api/admin/reports/weekly?start_date=${startDate}`);
+                    
+                    if (response && response.ok) {
+                        const data = await response.json();
+                        
+                        let reportHtml = `
+                            <div class="export-buttons">
+                                <button class="btn btn-success" onclick="exportReport('weekly', '${startDate}')">📊 Export CSV</button>
+                            </div>
+                            
+                            <div class="summary-grid">
+                                <div class="summary-card">
+                                    <h4>Week Range</h4>
+                                    <div class="value" style="font-size: 14px;">${data.week_start} to ${data.week_end}</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Total Employees</h4>
+                                    <div class="value">${data.total_employees}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="chart-container">
+                                <h4>Weekly Employee Activity</h4>
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Employee</th>
+                                            <th>Total Hours</th>
+                                            <th>Avg Daily Hours</th>
+                                            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.employees.map(emp => `
+                                            <tr>
+                                                <td><strong>${emp.username}</strong></td>
+                                                <td>${emp.total_hours}h</td>
+                                                <td>${emp.average_daily_hours}h</td>
+                                                ${emp.daily_breakdown.map(day => `<td>${day.hours_worked}h</td>`).join('')}
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        document.getElementById('weeklyReportContent').innerHTML = reportHtml;
+                    }
+                } catch (error) {
+                    document.getElementById('weeklyReportContent').innerHTML = '<p>Error loading report</p>';
+                }
+            }
+            
+            async function loadMonthlyReport() {
+                const monthDate = document.getElementById('monthlyDate').value;
+                if (!monthDate) return;
+                
+                // Convert YYYY-MM to start and end dates
+                const startDate = monthDate + '-01';
+                const nextMonth = new Date(monthDate + '-01');
+                nextMonth.setMonth(nextMonth.getMonth() + 1);
+                const endDate = nextMonth.toISOString().split('T')[0];
+                
+                loadCustomReport(startDate, endDate, 'monthlyReportContent');
+            }
+            
+            async function loadCustomReport(startDate = null, endDate = null, targetElement = 'customReportContent') {
+                if (!startDate) startDate = document.getElementById('customFromDate').value;
+                if (!endDate) endDate = document.getElementById('customToDate').value;
+                
+                if (!startDate || !endDate) {
+                    document.getElementById(targetElement).innerHTML = '<p>Please select both start and end dates</p>';
+                    return;
+                }
+                
+                try {
+                    const response = await makeAuthenticatedRequest(`/api/admin/reports/range?start_date=${startDate}&end_date=${endDate}`);
+                    
+                    if (response && response.ok) {
+                        const data = await response.json();
+                        
+                        let reportHtml = `
+                            <div class="export-buttons">
+                                <button class="btn btn-success" onclick="exportReport('custom', '${startDate}_${endDate}')">📊 Export CSV</button>
+                            </div>
+                            
+                            <div class="summary-grid">
+                                <div class="summary-card">
+                                    <h4>Date Range</h4>
+                                    <div class="value" style="font-size: 14px;">${data.start_date} to ${data.end_date}</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Duration</h4>
+                                    <div class="value">${data.duration_days} days</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Total Heartbeats</h4>
+                                    <div class="value">${data.summary.total_heartbeats}</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Total Logs</h4>
+                                    <div class="value">${data.summary.total_logs}</div>
+                                </div>
+                                <div class="summary-card">
+                                    <h4>Active Employees</h4>
+                                    <div class="value">${data.summary.unique_employees}</div>
+                                </div>
+                            </div>
+                            
+                            <div class="chart-container">
+                                <h4>Employee Activity Summary</h4>
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Employee</th>
+                                            <th>Estimated Active Hours</th>
+                                            <th>Heartbeats</th>
+                                            <th>Detailed Logs</th>
+                                            <th>First Activity</th>
+                                            <th>Last Activity</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${data.employees.map(emp => `
+                                            <tr>
+                                                <td><strong>${emp.username}</strong></td>
+                                                <td>${emp.estimated_active_hours}h</td>
+                                                <td>${emp.heartbeats_count}</td>
+                                                <td>${emp.logs_count}</td>
+                                                <td>${new Date(emp.first_activity).toLocaleString()}</td>
+                                                <td>${new Date(emp.last_activity).toLocaleString()}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        `;
+                        
+                        document.getElementById(targetElement).innerHTML = reportHtml;
+                    }
+                } catch (error) {
+                    document.getElementById(targetElement).innerHTML = '<p>Error loading report</p>';
+                }
+            }
+            
+            function exportReport(type, date) {
+                // Simple CSV export functionality
+                let csvContent = '';
+                const table = document.querySelector(`#${currentReportTab}ReportContent table`);
+                
+                if (table) {
+                    // Get table headers
+                    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+                    csvContent += headers.join(',') + '\n';
+                    
+                    // Get table rows
+                    const rows = Array.from(table.querySelectorAll('tbody tr'));
+                    rows.forEach(row => {
+                        const cells = Array.from(row.querySelectorAll('td')).map(td => {
+                            // Clean cell content (remove HTML and extra whitespace)
+                            return td.textContent.trim().replace(/[,\n]/g, ' ');
+                        });
+                        csvContent += cells.join(',') + '\n';
+                    });
+                    
+                    // Download CSV
+                    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `employee_report_${type}_${date}.csv`;
+                    link.click();
+                } else {
+                    alert('No report data available to export');
+                }
             }
             
             async function viewEmployeeLogs(username) {
