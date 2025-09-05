@@ -1,0 +1,55 @@
+psql postgresql://neondb_owner:npg_ULn8YVXzpx3R@ep-ancient-paper-aeexzy3k.c-2.us-east-2.aws.neon.tech/neondb?sslmode=require
+psql (17.5, server 16.9 (84ade85))
+WARNING: Console code page (437) differs from Windows code page (1252)
+         8-bit characters might not work correctly. See psql reference
+         page "Notes for Windows users" for details.
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, compression: off, ALPN: postgresql)
+Type "help" for help.
+
+neondb=> \dt
+                  List of relations
+ Schema |        Name         | Type  |    Owner
+--------+---------------------+-------+--------------
+ public | admin_users         | table | neondb_owner
+ public | employee_heartbeats | table | neondb_owner
+ public | employee_logs       | table | neondb_owner
+(3 rows)
+
+
+neondb=> select * from employee_heartbeats
+neondb-> ;
+ id | username |    hostname     | status |         timestamp          |         created_at
+----+----------+-----------------+--------+----------------------------+----------------------------
+  2 | runner   | 789ebdd77e9e    | online | 2025-09-05 08:17:14.387301 | 2025-09-05 08:17:14.389428
+  3 | basav    | DESKTOP-CMM8H3C | online | 2025-09-05 08:47:55.595892 | 2025-09-05 08:47:55.598265
+  4 | basav    | DESKTOP-CMM8H3C | online | 2025-09-05 08:52:56.964801 | 2025-09-05 08:52:56.966795
+(3 rows)
+
+
+neondb=> select * from employee_logs;
+ id | username | hostname | local_ip | public_ip | location | screenshot_path | timestamp | created_at
+----+----------+----------+----------+-----------+----------+-----------------+-----------+------------
+(0 rows)
+
+
+neondb=> select * from employee_heartbeats;
+ id | username |    hostname     | status |         timestamp          |         created_at
+----+----------+-----------------+--------+----------------------------+----------------------------
+  2 | runner   | 789ebdd77e9e    | online | 2025-09-05 08:17:14.387301 | 2025-09-05 08:17:14.389428
+  3 | basav    | DESKTOP-CMM8H3C | online | 2025-09-05 08:47:55.595892 | 2025-09-05 08:47:55.598265
+  4 | basav    | DESKTOP-CMM8H3C | online | 2025-09-05 08:52:56.964801 | 2025-09-05 08:52:56.966795
+(3 rows)
+
+
+neondb=> select * from employee_logs;
+ id | username | hostname | local_ip | public_ip | location | screenshot_path | timestamp | created_at
+----+----------+----------+----------+-----------+----------+-----------------+-----------+------------
+(0 rows)
+
+
+neondb=> select * from admin_users;
+ id | username |                       hashed_password                        | is_active |         created_at
+----+----------+--------------------------------------------------------------+-----------+----------------------------
+  1 | admin    | $2b$12$Ud63jfxssH9iHdoZN9k1feYHrzixBotzgKEkoipu1.yXEvMZBH8RO | t         | 2025-09-05 06:53:09.746875
+(1 row)
+
