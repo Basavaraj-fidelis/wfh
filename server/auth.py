@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy.orm import Session
 from database import get_db, AdminUser
 
@@ -15,7 +15,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 # Auth token for agents (simple token-based auth)
 AGENT_TOKEN = "agent-secret-token-change-this-in-production"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use bcrypt directly for better compatibility
+def _hash_password(password: str) -> str:
+    """Hash a password using bcrypt"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against its hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
 security = HTTPBearer()
 
 class AuthenticationError(HTTPException):
@@ -27,10 +35,10 @@ class AuthenticationError(HTTPException):
         )
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return _verify_password(plain_password, hashed_password)
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    return _hash_password(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -50,7 +58,7 @@ def verify_admin_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             raise AuthenticationError()
     except JWTError:
         raise AuthenticationError()
-    
+
     user = db.query(AdminUser).filter(AdminUser.username == username).first()
     if user is None or user.is_active is False:
         raise AuthenticationError()
