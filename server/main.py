@@ -925,13 +925,34 @@ def dashboard():
                 }
             }
             
-            async function loadDashboardData() {
+            async function makeAuthenticatedRequest(url, options = {}) {
                 try {
-                    const response = await fetch('/api/admin/employees/status', {
-                        headers: { 'Authorization': 'Bearer ' + authToken }
+                    const response = await fetch(url, {
+                        ...options,
+                        headers: {
+                            'Authorization': 'Bearer ' + authToken,
+                            ...options.headers
+                        }
                     });
                     
-                    if (response.ok) {
+                    if (response.status === 401) {
+                        console.log('Token expired, redirecting to login');
+                        logout();
+                        return null;
+                    }
+                    
+                    return response;
+                } catch (error) {
+                    console.error('Request failed:', error);
+                    return null;
+                }
+            }
+
+            async function loadDashboardData() {
+                try {
+                    const response = await makeAuthenticatedRequest('/api/admin/employees/status');
+                    
+                    if (response && response.ok) {
                         const data = await response.json();
                         const employees = data.employees || [];
                         
@@ -956,6 +977,9 @@ def dashboard():
                         ).join('');
                         
                         document.getElementById('recentActivity').innerHTML = activityHtml || '<p>No employee data available</p>';
+                    } else if (response === null) {
+                        // Token expired, user was redirected to login
+                        return;
                     }
                 } catch (error) {
                     console.error('Failed to load dashboard data:', error);
@@ -964,11 +988,9 @@ def dashboard():
             
             async function loadEmployees() {
                 try {
-                    const response = await fetch('/api/admin/employees/status', {
-                        headers: { 'Authorization': 'Bearer ' + authToken }
-                    });
+                    const response = await makeAuthenticatedRequest('/api/admin/employees/status');
                     
-                    if (response.ok) {
+                    if (response && response.ok) {
                         const data = await response.json();
                         const employees = data.employees || [];
                         
@@ -1012,6 +1034,11 @@ def dashboard():
                         `;
                         
                         document.getElementById('employeesList').innerHTML = employees.length ? tableHtml : '<p>No employees found</p>';
+                    } else if (response === null) {
+                        // Token expired, user was redirected to login
+                        return;
+                    } else {
+                        document.getElementById('employeesList').innerHTML = '<p>Error loading employees</p>';
                     }
                 } catch (error) {
                     document.getElementById('employeesList').innerHTML = '<p>Error loading employees</p>';
@@ -1024,11 +1051,9 @@ def dashboard():
             
             async function viewEmployeeLogs(username) {
                 try {
-                    const response = await fetch(`/api/admin/employees/${username}/logs?days=7`, {
-                        headers: { 'Authorization': 'Bearer ' + authToken }
-                    });
+                    const response = await makeAuthenticatedRequest(`/api/admin/employees/${username}/logs?days=7`);
                     
-                    if (response.ok) {
+                    if (response && response.ok) {
                         const data = await response.json();
                         const logs = data.logs || [];
                         
@@ -1056,6 +1081,11 @@ def dashboard():
                         }
                         
                         showModal('Employee Logs', logDetails);
+                    } else if (response === null) {
+                        // Token expired, user was redirected to login
+                        showModal('Session Expired', '<p>Your session has expired. Please login again.</p>');
+                    } else {
+                        showModal('Error', '<p>Error loading logs. Please try again.</p>');
                     }
                 } catch (error) {
                     showModal('Error', '<p>Error loading logs: ' + error.message + '</p>');
@@ -1065,11 +1095,9 @@ def dashboard():
             async function viewWorkingHours(username) {
                 try {
                     const today = new Date().toISOString().split('T')[0];
-                    const response = await fetch(`/api/admin/employees/${username}/working-hours?date=${today}`, {
-                        headers: { 'Authorization': 'Bearer ' + authToken }
-                    });
+                    const response = await makeAuthenticatedRequest(`/api/admin/employees/${username}/working-hours?date=${today}`);
                     
-                    if (response.ok) {
+                    if (response && response.ok) {
                         const data = await response.json();
                         
                         let hoursDetails = `<h3>⏰ Working Hours for ${username}</h3>`;
@@ -1102,6 +1130,11 @@ def dashboard():
                         }
                         
                         showModal('Working Hours', hoursDetails);
+                    } else if (response === null) {
+                        // Token expired, user was redirected to login
+                        showModal('Session Expired', '<p>Your session has expired. Please login again.</p>');
+                    } else {
+                        showModal('Error', '<p>Error loading working hours. Please try again.</p>');
                     }
                 } catch (error) {
                     showModal('Error', '<p>Error loading working hours: ' + error.message + '</p>');
