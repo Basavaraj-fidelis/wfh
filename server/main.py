@@ -1784,59 +1784,58 @@ def dashboard():
                         
                         let reportHtml = '<div class="export-buttons">' +
                                 '<button class="btn btn-success" onclick="exportReport(\'custom\', \'' + startDate + '_' + endDate + '\')">📊 Export CSV</button>' +
-                            '</div>'
-                            
-                            <div class="summary-grid">
-                                <div class="summary-card">
-                                    <h4>Date Range</h4>
-                                    <div class="value" style="font-size: 14px;">${data.start_date} to ${data.end_date}</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Duration</h4>
-                                    <div class="value">${data.duration_days} days</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Total Heartbeats</h4>
-                                    <div class="value">${data.summary.total_heartbeats}</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Total Logs</h4>
-                                    <div class="value">${data.summary.total_logs}</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Active Employees</h4>
-                                    <div class="value">${data.summary.unique_employees}</div>
-                                </div>
-                            </div>
-                            
-                            <div class="chart-container">
-                                <h4>Employee Activity Summary</h4>
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Employee</th>
-                                            <th>Estimated Active Hours</th>
-                                            <th>Heartbeats</th>
-                                            <th>Detailed Logs</th>
-                                            <th>First Activity</th>
-                                            <th>Last Activity</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${data.employees.map(emp => `
-                                            <tr>
-                                                <td><strong>${emp.username}</strong></td>
-                                                <td>${emp.estimated_active_hours}h</td>
-                                                <td>${emp.heartbeats_count}</td>
-                                                <td>${emp.logs_count}</td>
-                                                <td>${new Date(emp.first_activity).toLocaleString()}</td>
-                                                <td>${new Date(emp.last_activity).toLocaleString()}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        `;
+                            '</div>' +
+                            '<div class="summary-grid">' +
+                                '<div class="summary-card">' +
+                                    '<h4>Date Range</h4>' +
+                                    '<div class="value" style="font-size: 14px;">' + data.start_date + ' to ' + data.end_date + '</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Duration</h4>' +
+                                    '<div class="value">' + data.duration_days + ' days</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Total Heartbeats</h4>' +
+                                    '<div class="value">' + data.summary.total_heartbeats + '</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Total Logs</h4>' +
+                                    '<div class="value">' + data.summary.total_logs + '</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Active Employees</h4>' +
+                                    '<div class="value">' + data.summary.unique_employees + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="chart-container">' +
+                                '<h4>Employee Activity Summary</h4>' +
+                                '<table class="table">' +
+                                    '<thead>' +
+                                        '<tr>' +
+                                            '<th>Employee</th>' +
+                                            '<th>Estimated Active Hours</th>' +
+                                            '<th>Heartbeats</th>' +
+                                            '<th>Detailed Logs</th>' +
+                                            '<th>First Activity</th>' +
+                                            '<th>Last Activity</th>' +
+                                        '</tr>' +
+                                    '</thead>' +
+                                    '<tbody>';
+                                        
+                        data.employees.forEach(emp => {
+                            reportHtml += '<tr>' +
+                                '<td><strong>' + emp.username + '</strong></td>' +
+                                '<td>' + emp.estimated_active_hours + 'h</td>' +
+                                '<td>' + emp.heartbeats_count + '</td>' +
+                                '<td>' + emp.logs_count + '</td>' +
+                                '<td>' + new Date(emp.first_activity).toLocaleString() + '</td>' +
+                                '<td>' + new Date(emp.last_activity).toLocaleString() + '</td>' +
+                            '</tr>';
+                        });
+                        
+                        reportHtml += '</tbody>' +
+                                '</table>' +
+                            '</div>';
                         
                         document.getElementById(targetElement).innerHTML = reportHtml;
                     }
