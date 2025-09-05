@@ -5,8 +5,17 @@ import axios from 'axios';
 const AgentSection: React.FC = () => {
   const downloadAgent = async (platform: string) => {
     try {
-      const response = await axios.get(`/download/agent/${platform}`, {
-        responseType: 'blob'
+      const token = localStorage.getItem('token');
+      if (!token) {
+        alert('Please login first');
+        return;
+      }
+
+      const response = await axios.get(`/api/download/agent/${platform}`, {
+        responseType: 'blob',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
@@ -20,6 +29,7 @@ const AgentSection: React.FC = () => {
       
       alert(`Agent for ${platform} downloaded successfully!`);
     } catch (error) {
+      console.error('Download error:', error);
       alert('Download failed: ' + (error as any).message);
     }
   };

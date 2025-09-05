@@ -2142,7 +2142,7 @@ def legacy_dashboard():
     """
 
 # Agent download endpoints
-@app.get("/download/agent/{platform}")
+@app.get("/api/download/agent/{platform}")
 def download_agent(platform: str, admin=Depends(verify_admin_token)):
     """Download agent installer for specified platform"""
     import zipfile
