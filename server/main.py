@@ -60,7 +60,7 @@ def startup_event():
         print("Starting up application...")
         create_tables()
         print("Database tables created successfully")
-        
+
         # Create default admin user if none exists
         db = next(get_db())
         admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
@@ -114,19 +114,19 @@ def receive_detailed_log(
         print(f"Received detailed log from {username}@{hostname}")
         print(f"IPs: local={local_ip}, public={public_ip}")
         print(f"Location: {location}")
-        
+
         # Save screenshot
         timestamp = datetime.utcnow()
         filename = f"{username}_{timestamp.strftime('%Y%m%d_%H%M%S')}.png"
         screenshot_path = os.path.join(screenshots_dir, filename)
-        
+
         print(f"Saving screenshot to: {screenshot_path}")
-        
+
         with open(screenshot_path, "wb") as buffer:
             content = screenshot.file.read()
             buffer.write(content)
             print(f"Screenshot saved, size: {len(content)} bytes")
-        
+
         # Save log to database
         log_record = EmployeeLog(
             username=username,
@@ -137,19 +137,19 @@ def receive_detailed_log(
             screenshot_path=screenshot_path,
             timestamp=timestamp
         )
-        
+
         print(f"Saving log record to database...")
         db.add(log_record)
         db.commit()
         print(f"Log record saved successfully with ID: {log_record.id}")
-        
+
         return {
-            "status": "success", 
-            "message": "Detailed log received", 
+            "status": "success",
+            "message": "Detailed log received",
             "screenshot_saved": filename,
             "log_id": log_record.id
         }
-        
+
     except Exception as e:
         print(f"Error processing detailed log: {e}")
         import traceback
@@ -164,19 +164,19 @@ def admin_login(login_data: AdminLogin, db: Session = Depends(get_db)):
     try:
         print(f"Login attempt for username: {login_data.username}")
         admin = db.query(AdminUser).filter(AdminUser.username == login_data.username).first()
-        
+
         if not admin:
             print(f"Admin user not found: {login_data.username}")
             raise HTTPException(status_code=401, detail="Incorrect username or password")
-            
+
         if not verify_password(login_data.password, admin.hashed_password):
             print(f"Password verification failed for: {login_data.username}")
             raise HTTPException(status_code=401, detail="Incorrect username or password")
-        
+
         print(f"Login successful for: {login_data.username}")
         access_token = create_access_token(data={"sub": admin.username})
         return {"access_token": access_token, "token_type": "bearer"}
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -204,7 +204,7 @@ def debug_admin_user(db: Session = Depends(get_db)):
     try:
         admin_count = db.query(AdminUser).count()
         admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
-        
+
         return {
             "total_admin_users": admin_count,
             "admin_user_exists": admin is not None,
@@ -227,7 +227,7 @@ def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends
         EmployeeHeartbeat.username,
         func.max(EmployeeHeartbeat.timestamp).label('latest_timestamp')
     ).group_by(EmployeeHeartbeat.username).subquery()
-    
+
     current_status = db.query(EmployeeHeartbeat).join(
         latest_heartbeats,
         and_(
@@ -235,25 +235,25 @@ def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends
             EmployeeHeartbeat.timestamp == latest_heartbeats.c.latest_timestamp
         )
     ).all()
-    
+
     # Determine online status (online if heartbeat within last 10 minutes)
     cutoff_time = datetime.utcnow() - timedelta(minutes=10)
     employees = []
-    
+
     for heartbeat in current_status:
         is_online = heartbeat.timestamp > cutoff_time
-        
+
         # Get latest log entry for location details
         latest_log = db.query(EmployeeLog).filter(
             EmployeeLog.username == heartbeat.username
         ).order_by(desc(EmployeeLog.timestamp)).first()
-        
+
         # Parse location data if available
         public_ip = "Unknown"
         city = "Unknown"
         state = "Unknown"
         country = "Unknown"
-        
+
         if latest_log and latest_log.location:
             try:
                 location_data = json.loads(latest_log.location)
@@ -263,7 +263,7 @@ def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends
                 country = location_data.get('country', 'Unknown')
             except (json.JSONDecodeError, AttributeError):
                 pass
-        
+
         employees.append({
             "username": heartbeat.username,
             "hostname": heartbeat.hostname,
@@ -276,7 +276,7 @@ def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends
             "country": country,
             "location_updated": latest_log.timestamp if latest_log else None
         })
-    
+
     return {"employees": employees}
 
 @app.get("/api/admin/employees/{username}/logs")
@@ -292,7 +292,7 @@ def get_employee_logs(
         EmployeeLog.username == username,
         EmployeeLog.timestamp > cutoff_date
     ).order_by(desc(EmployeeLog.timestamp)).all()
-    
+
     return {"username": username, "logs": logs}
 
 @app.get("/api/admin/employees/{username}/working-hours")
@@ -307,16 +307,16 @@ def get_working_hours(
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     else:
         target_date = datetime.utcnow().date()
-    
+
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
-    
+
     heartbeats = db.query(EmployeeHeartbeat).filter(
         EmployeeHeartbeat.username == username,
         EmployeeHeartbeat.timestamp >= start_of_day,
         EmployeeHeartbeat.timestamp < end_of_day
     ).order_by(EmployeeHeartbeat.timestamp).all()
-    
+
     if not heartbeats:
         return {
             "username": username,
@@ -325,14 +325,14 @@ def get_working_hours(
             "first_seen": None,
             "last_seen": None
         }
-    
+
     first_heartbeat = heartbeats[0].timestamp
     last_heartbeat = heartbeats[-1].timestamp
-    
+
     # Calculate working hours (assuming continuous work between first and last heartbeat)
     total_seconds = (last_heartbeat - first_heartbeat).total_seconds()
     total_hours = total_seconds / 3600  # Convert to hours
-    
+
     return {
         "username": username,
         "date": target_date.isoformat(),
@@ -345,30 +345,30 @@ def get_working_hours(
 def cleanup_old_data(admin=Depends(verify_admin_token), db: Session = Depends(get_db)):
     """Clean up data older than 45 days"""
     cutoff_date = datetime.utcnow() - timedelta(days=45)
-    
+
     # Delete old heartbeats
     old_heartbeats = db.query(EmployeeHeartbeat).filter(
         EmployeeHeartbeat.timestamp < cutoff_date
     ).delete()
-    
+
     # Delete old logs and their screenshots
     old_logs = db.query(EmployeeLog).filter(
         EmployeeLog.timestamp < cutoff_date
     ).all()
-    
+
     deleted_screenshots = 0
     for log in old_logs:
         if log.screenshot_path and os.path.exists(log.screenshot_path):
             os.remove(log.screenshot_path)
             deleted_screenshots += 1
-    
+
     # Delete log records
     deleted_logs = db.query(EmployeeLog).filter(
         EmployeeLog.timestamp < cutoff_date
     ).delete()
-    
+
     db.commit()
-    
+
     return {
         "deleted_heartbeats": old_heartbeats,
         "deleted_logs": deleted_logs,
@@ -387,19 +387,19 @@ def get_daily_report(
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     else:
         target_date = datetime.utcnow().date()
-    
+
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
-    
+
     # Get all employees who were active on this date
     employees_with_activity = db.query(EmployeeHeartbeat.username).filter(
         EmployeeHeartbeat.timestamp >= start_of_day,
         EmployeeHeartbeat.timestamp < end_of_day
     ).distinct().all()
-    
+
     report_data = []
     total_hours = 0
-    
+
     for (username,) in employees_with_activity:
         # Get working hours
         heartbeats = db.query(EmployeeHeartbeat).filter(
@@ -407,20 +407,20 @@ def get_daily_report(
             EmployeeHeartbeat.timestamp >= start_of_day,
             EmployeeHeartbeat.timestamp < end_of_day
         ).order_by(EmployeeHeartbeat.timestamp).all()
-        
+
         if heartbeats:
             first_heartbeat = heartbeats[0].timestamp
             last_heartbeat = heartbeats[-1].timestamp
             hours_worked = (last_heartbeat - first_heartbeat).total_seconds() / 3600
             total_hours += hours_worked
-            
+
             # Get detailed logs count
             logs_count = db.query(EmployeeLog).filter(
                 EmployeeLog.username == username,
                 EmployeeLog.timestamp >= start_of_day,
                 EmployeeLog.timestamp < end_of_day
             ).count()
-            
+
             report_data.append({
                 "username": username,
                 "hours_worked": round(hours_worked, 2),
@@ -429,7 +429,7 @@ def get_daily_report(
                 "heartbeats_count": len(heartbeats),
                 "logs_count": logs_count
             })
-    
+
     return {
         "date": target_date.isoformat(),
         "total_employees_active": len(report_data),
@@ -450,41 +450,41 @@ def get_weekly_report(
     else:
         today = datetime.utcnow().date()
         week_start = today - timedelta(days=today.weekday())
-    
+
     week_end = week_start + timedelta(days=7)
     start_datetime = datetime.combine(week_start, datetime.min.time())
     end_datetime = datetime.combine(week_end, datetime.min.time())
-    
+
     # Get all employees with activity in this week
     employees_with_activity = db.query(EmployeeHeartbeat.username).filter(
         EmployeeHeartbeat.timestamp >= start_datetime,
         EmployeeHeartbeat.timestamp < end_datetime
     ).distinct().all()
-    
+
     report_data = []
-    
+
     for (username,) in employees_with_activity:
         daily_data = []
         total_week_hours = 0
-        
+
         # Get data for each day of the week
         for day_offset in range(7):
             current_date = week_start + timedelta(days=day_offset)
             day_start = datetime.combine(current_date, datetime.min.time())
             day_end = day_start + timedelta(days=1)
-            
+
             heartbeats = db.query(EmployeeHeartbeat).filter(
                 EmployeeHeartbeat.username == username,
                 EmployeeHeartbeat.timestamp >= day_start,
                 EmployeeHeartbeat.timestamp < day_end
             ).order_by(EmployeeHeartbeat.timestamp).all()
-            
+
             if heartbeats:
                 first_heartbeat = heartbeats[0].timestamp
                 last_heartbeat = heartbeats[-1].timestamp
                 day_hours = (last_heartbeat - first_heartbeat).total_seconds() / 3600
                 total_week_hours += day_hours
-                
+
                 daily_data.append({
                     "date": current_date.isoformat(),
                     "hours_worked": round(day_hours, 2),
@@ -496,14 +496,14 @@ def get_weekly_report(
                     "hours_worked": 0,
                     "heartbeats_count": 0
                 })
-        
+
         report_data.append({
             "username": username,
             "total_hours": round(total_week_hours, 2),
             "average_daily_hours": round(total_week_hours / 7, 2),
             "daily_breakdown": daily_data
         })
-    
+
     return {
         "week_start": week_start.isoformat(),
         "week_end": (week_end - timedelta(days=1)).isoformat(),
@@ -521,55 +521,55 @@ def get_range_report(
     """Get activity report for custom date range"""
     start_datetime = datetime.strptime(start_date, "%Y-%m-%d")
     end_datetime = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
-    
+
     # Get summary statistics
     total_heartbeats = db.query(EmployeeHeartbeat).filter(
         EmployeeHeartbeat.timestamp >= start_datetime,
         EmployeeHeartbeat.timestamp < end_datetime
     ).count()
-    
+
     total_logs = db.query(EmployeeLog).filter(
         EmployeeLog.timestamp >= start_datetime,
         EmployeeLog.timestamp < end_datetime
     ).count()
-    
+
     unique_employees = db.query(EmployeeHeartbeat.username).filter(
         EmployeeHeartbeat.timestamp >= start_datetime,
         EmployeeHeartbeat.timestamp < end_datetime
     ).distinct().count()
-    
+
     # Get per-employee breakdown
     employees_with_activity = db.query(EmployeeHeartbeat.username).filter(
         EmployeeHeartbeat.timestamp >= start_datetime,
         EmployeeHeartbeat.timestamp < end_datetime
     ).distinct().all()
-    
+
     employee_data = []
-    
+
     for (username,) in employees_with_activity:
         heartbeats = db.query(EmployeeHeartbeat).filter(
             EmployeeHeartbeat.username == username,
             EmployeeHeartbeat.timestamp >= start_datetime,
             EmployeeHeartbeat.timestamp < end_datetime
         ).order_by(EmployeeHeartbeat.timestamp).all()
-        
+
         logs_count = db.query(EmployeeLog).filter(
             EmployeeLog.username == username,
             EmployeeLog.timestamp >= start_datetime,
             EmployeeLog.timestamp < end_datetime
         ).count()
-        
+
         if heartbeats:
             first_activity = heartbeats[0].timestamp
             last_activity = heartbeats[-1].timestamp
-            
+
             # Calculate total active time (sum of gaps < 15 minutes)
             active_time = 0
             for i in range(len(heartbeats) - 1):
                 gap = (heartbeats[i + 1].timestamp - heartbeats[i].timestamp).total_seconds()
                 if gap <= 900:  # 15 minutes or less
                     active_time += gap
-            
+
             employee_data.append({
                 "username": username,
                 "heartbeats_count": len(heartbeats),
@@ -578,7 +578,7 @@ def get_range_report(
                 "first_activity": first_activity,
                 "last_activity": last_activity
             })
-    
+
     return {
         "start_date": start_date,
         "end_date": end_date,
@@ -607,13 +607,13 @@ def dashboard():
                 padding: 0;
                 box-sizing: border-box;
             }
-            
+
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
                 background: #f5f5f5;
                 color: #333;
             }
-            
+
             .login-container {
                 display: flex;
                 justify-content: center;
@@ -621,7 +621,7 @@ def dashboard():
                 height: 100vh;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             }
-            
+
             .login-box {
                 background: white;
                 padding: 40px;
@@ -630,24 +630,24 @@ def dashboard():
                 width: 100%;
                 max-width: 400px;
             }
-            
+
             .login-box h2 {
                 text-align: center;
                 margin-bottom: 30px;
                 color: #333;
                 font-weight: 300;
             }
-            
+
             .form-group {
                 margin-bottom: 20px;
             }
-            
+
             .form-group label {
                 display: block;
                 margin-bottom: 5px;
                 font-weight: 500;
             }
-            
+
             .form-group input {
                 width: 100%;
                 padding: 12px;
@@ -655,7 +655,7 @@ def dashboard():
                 border-radius: 5px;
                 font-size: 14px;
             }
-            
+
             .btn-primary {
                 width: 100%;
                 padding: 12px;
@@ -667,16 +667,16 @@ def dashboard():
                 cursor: pointer;
                 transition: background 0.3s;
             }
-            
+
             .btn-primary:hover {
                 background: #5a6fd8;
             }
-            
+
             .dashboard {
                 display: none;
                 min-height: 100vh;
             }
-            
+
             .sidebar {
                 position: fixed;
                 left: 0;
@@ -687,27 +687,27 @@ def dashboard():
                 color: white;
                 overflow-y: auto;
             }
-            
+
             .sidebar-header {
                 padding: 20px;
                 background: #34495e;
                 border-bottom: 1px solid #3d566e;
             }
-            
+
             .sidebar-header h3 {
                 font-size: 18px;
                 font-weight: 300;
             }
-            
+
             .nav-menu {
                 list-style: none;
                 padding: 0;
             }
-            
+
             .nav-menu li {
                 border-bottom: 1px solid #3d566e;
             }
-            
+
             .nav-menu a {
                 display: block;
                 padding: 15px 20px;
@@ -715,18 +715,18 @@ def dashboard():
                 text-decoration: none;
                 transition: background 0.3s;
             }
-            
+
             .nav-menu a:hover,
             .nav-menu a.active {
                 background: #34495e;
                 color: #3498db;
             }
-            
+
             .main-content {
                 margin-left: 250px;
                 padding: 20px;
             }
-            
+
             .header {
                 background: white;
                 padding: 20px;
@@ -737,7 +737,7 @@ def dashboard():
                 justify-content: space-between;
                 align-items: center;
             }
-            
+
             .content-section {
                 display: none;
                 background: white;
@@ -745,18 +745,18 @@ def dashboard():
                 border-radius: 5px;
                 box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             }
-            
+
             .content-section.active {
                 display: block;
             }
-            
+
             .stats-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
                 gap: 20px;
                 margin-bottom: 30px;
             }
-            
+
             .stat-card {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 color: white;
@@ -764,40 +764,40 @@ def dashboard():
                 border-radius: 5px;
                 text-align: center;
             }
-            
+
             .stat-card h3 {
                 font-size: 24px;
                 margin-bottom: 10px;
             }
-            
+
             .table {
                 width: 100%;
                 border-collapse: collapse;
                 margin-top: 20px;
             }
-            
+
             .table th,
             .table td {
                 padding: 12px;
                 text-align: left;
                 border-bottom: 1px solid #ddd;
             }
-            
+
             .table th {
                 background: #f8f9fa;
                 font-weight: 500;
             }
-            
+
             .status-online {
                 color: #28a745;
                 font-weight: bold;
             }
-            
+
             .status-offline {
                 color: #dc3545;
                 font-weight: bold;
             }
-            
+
             .btn {
                 padding: 8px 16px;
                 border: none;
@@ -807,54 +807,54 @@ def dashboard():
                 display: inline-block;
                 font-size: 14px;
             }
-            
+
             .btn-success {
                 background: #28a745;
                 color: white;
             }
-            
+
             .btn-danger {
                 background: #dc3545;
                 color: white;
             }
-            
+
             .btn-primary-sm {
                 background: #007bff;
                 color: white;
             }
-            
+
             .download-card {
                 border: 1px solid #ddd;
                 padding: 20px;
                 margin: 20px 0;
                 border-radius: 5px;
             }
-            
+
             .form-row {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 20px;
                 margin-bottom: 20px;
             }
-            
+
             .alert {
                 padding: 15px;
                 margin-bottom: 20px;
                 border-radius: 4px;
             }
-            
+
             .alert-success {
                 background: #d4edda;
                 color: #155724;
                 border: 1px solid #c3e6cb;
             }
-            
+
             .alert-error {
                 background: #f8d7da;
                 color: #721c24;
                 border: 1px solid #f5c6cb;
             }
-            
+
             /* Enhanced UI Styles */
             .search-filter-bar {
                 background: #f8f9fa;
@@ -866,12 +866,12 @@ def dashboard():
                 flex-wrap: wrap;
                 align-items: center;
             }
-            
+
             .search-box {
                 flex: 1;
                 min-width: 200px;
             }
-            
+
             .search-box input {
                 width: 100%;
                 padding: 8px 12px;
@@ -879,11 +879,11 @@ def dashboard():
                 border-radius: 4px;
                 font-size: 14px;
             }
-            
+
             .filter-select {
                 min-width: 150px;
             }
-            
+
             .filter-select select {
                 padding: 8px 12px;
                 border: 1px solid #ddd;
@@ -891,26 +891,26 @@ def dashboard():
                 background: white;
                 font-size: 14px;
             }
-            
+
             .date-picker {
                 display: flex;
                 gap: 10px;
                 align-items: center;
             }
-            
+
             .date-picker input {
                 padding: 8px 12px;
                 border: 1px solid #ddd;
                 border-radius: 4px;
                 font-size: 14px;
             }
-            
+
             .report-tabs {
                 display: flex;
                 border-bottom: 1px solid #ddd;
                 margin-bottom: 20px;
             }
-            
+
             .report-tab {
                 padding: 12px 20px;
                 background: none;
@@ -921,17 +921,17 @@ def dashboard():
                 border-bottom: 3px solid transparent;
                 transition: all 0.3s;
             }
-            
+
             .report-tab.active {
                 color: #007bff;
                 border-bottom-color: #007bff;
             }
-            
+
             .report-tab:hover {
                 color: #007bff;
                 background: #f8f9fa;
             }
-            
+
             .chart-container {
                 background: white;
                 padding: 20px;
@@ -939,7 +939,7 @@ def dashboard():
                 box-shadow: 0 2px 10px rgba(0,0,0,0.1);
                 margin-bottom: 20px;
             }
-            
+
             .progress-bar {
                 width: 100%;
                 height: 20px;
@@ -948,13 +948,13 @@ def dashboard():
                 overflow: hidden;
                 position: relative;
             }
-            
+
             .progress-fill {
                 height: 100%;
                 transition: width 0.3s;
                 border-radius: 10px;
             }
-            
+
             .progress-text {
                 position: absolute;
                 top: 50%;
@@ -964,20 +964,20 @@ def dashboard():
                 font-weight: bold;
                 color: #333;
             }
-            
+
             .export-buttons {
                 display: flex;
                 gap: 10px;
                 margin-bottom: 20px;
             }
-            
+
             .summary-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
                 gap: 15px;
                 margin-bottom: 20px;
             }
-            
+
             .summary-card {
                 background: white;
                 padding: 15px;
@@ -985,19 +985,19 @@ def dashboard():
                 border: 1px solid #ddd;
                 text-align: center;
             }
-            
+
             .summary-card h4 {
                 margin: 0 0 10px 0;
                 color: #333;
                 font-size: 18px;
             }
-            
+
             .summary-card .value {
                 font-size: 24px;
                 font-weight: bold;
                 color: #007bff;
             }
-            
+
             .employee-card {
                 background: white;
                 border: 1px solid #ddd;
@@ -1008,11 +1008,11 @@ def dashboard():
                 justify-content: space-between;
                 align-items: center;
             }
-            
+
             .employee-info {
                 flex: 1;
             }
-            
+
             .employee-actions {
                 display: flex;
                 gap: 5px;
@@ -1038,7 +1038,7 @@ def dashboard():
                 </form>
             </div>
         </div>
-        
+
         <!-- Dashboard -->
         <div id="dashboardScreen" class="dashboard">
             <div class="sidebar">
@@ -1055,7 +1055,7 @@ def dashboard():
                     <li><a href="#" onclick="logout()">🚪 Logout</a></li>
                 </ul>
             </div>
-            
+
             <div class="main-content">
                 <div class="header">
                     <div>
@@ -1067,7 +1067,7 @@ def dashboard():
                         <button class="btn btn-danger" onclick="logout()">Logout</button>
                     </div>
                 </div>
-                
+
                 <!-- Dashboard Section -->
                 <div id="dashboardSection" class="content-section active">
                     <div class="stats-grid">
@@ -1088,18 +1088,18 @@ def dashboard():
                             <p>Total Logs Today</p>
                         </div>
                     </div>
-                    
+
                     <h3>Recent Employee Activity</h3>
                     <div id="recentActivity">Loading...</div>
                 </div>
-                
+
                 <!-- Users Section -->
                 <div id="usersSection" class="content-section">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                         <h3>Employee Management</h3>
                         <button class="btn btn-success" onclick="refreshEmployees()">🔄 Refresh</button>
                     </div>
-                    
+
                     <!-- Search and Filter Bar -->
                     <div class="search-filter-bar">
                         <div class="search-box">
@@ -1121,14 +1121,14 @@ def dashboard():
                             </select>
                         </div>
                     </div>
-                    
+
                     <div id="employeesList">Loading employees...</div>
                 </div>
-                
+
                 <!-- Reports Section -->
                 <div id="reportsSection" class="content-section">
                     <h3>Reports & Analytics</h3>
-                    
+
                     <!-- Report Tabs -->
                     <div class="report-tabs">
                         <button class="report-tab active" onclick="showReportTab('daily')">Daily Reports</button>
@@ -1136,7 +1136,7 @@ def dashboard():
                         <button class="report-tab" onclick="showReportTab('monthly')">Monthly Reports</button>
                         <button class="report-tab" onclick="showReportTab('custom')">Custom Range</button>
                     </div>
-                    
+
                     <!-- Daily Reports Tab -->
                     <div id="dailyReportTab" class="report-content active">
                         <div class="date-picker">
@@ -1146,7 +1146,7 @@ def dashboard():
                         </div>
                         <div id="dailyReportContent"></div>
                     </div>
-                    
+
                     <!-- Weekly Reports Tab -->
                     <div id="weeklyReportTab" class="report-content" style="display: none;">
                         <div class="date-picker">
@@ -1156,7 +1156,7 @@ def dashboard():
                         </div>
                         <div id="weeklyReportContent"></div>
                     </div>
-                    
+
                     <!-- Monthly Reports Tab -->
                     <div id="monthlyReportTab" class="report-content" style="display: none;">
                         <div class="date-picker">
@@ -1166,7 +1166,7 @@ def dashboard():
                         </div>
                         <div id="monthlyReportContent"></div>
                     </div>
-                    
+
                     <!-- Custom Range Tab -->
                     <div id="customReportTab" class="report-content" style="display: none;">
                         <div class="date-picker">
@@ -1179,33 +1179,33 @@ def dashboard():
                         <div id="customReportContent"></div>
                     </div>
                 </div>
-                
+
                 <!-- Agent Download Section -->
                 <div id="agentSection" class="content-section">
                     <h3>Agent Download & Setup</h3>
                     <p>Download the monitoring agent to install on employee computers.</p>
-                    
+
                     <div class="download-card">
                         <h4>Windows Agent (.msi)</h4>
                         <p>For Windows 7/8/10/11 systems</p>
                         <p><strong>Silent Install:</strong> <code>msiexec /i agent.msi /qn</code></p>
                         <button class="btn btn-primary-sm" onclick="downloadAgent('windows')">Download Windows Installer</button>
                     </div>
-                    
+
                     <div class="download-card">
                         <h4>macOS Agent (.pkg)</h4>
                         <p>For macOS 10.12 and newer</p>
                         <p><strong>Install:</strong> Double-click to install or <code>sudo installer -pkg agent.pkg -target /</code></p>
                         <button class="btn btn-primary-sm" onclick="downloadAgent('mac')">Download macOS Package</button>
                     </div>
-                    
+
                     <div class="download-card">
                         <h4>Linux Agent (.deb)</h4>
                         <p>For Ubuntu, Debian, and derivatives</p>
                         <p><strong>Install:</strong> <code>sudo dpkg -i agent.deb</code></p>
                         <button class="btn btn-primary-sm" onclick="downloadAgent('linux')">Download Linux Package</button>
                     </div>
-                    
+
                     <div style="margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px;">
                         <h4>Installation Instructions</h4>
                         <ol>
@@ -1216,17 +1216,17 @@ def dashboard():
                             <li>Update the server URL in the agent configuration</li>
                             <li>Run: <code>python agent.py</code> to start monitoring</li>
                         </ol>
-                        
+
                         <h4 style="margin-top: 20px;">Configuration</h4>
                         <p><strong>Server URL:</strong> <span id="serverUrl">' + window.location.origin + '</span></p>
                         <p><strong>Agent Token:</strong> <code>agent-secret-token-change-this-in-production</code></p>
                     </div>
                 </div>
-                
+
                 <!-- Settings Section -->
                 <div id="settingsSection" class="content-section">
                     <h3>System Settings</h3>
-                    
+
                     <div class="form-row">
                         <div>
                             <label>Data Retention Period (days)</label>
@@ -1237,7 +1237,7 @@ def dashboard():
                             <input type="number" id="heartbeatInterval" value="5" min="1" max="60">
                         </div>
                     </div>
-                    
+
                     <div class="form-row">
                         <div>
                             <label>Agent Token</label>
@@ -1252,30 +1252,30 @@ def dashboard():
                             </select>
                         </div>
                     </div>
-                    
+
                     <div style="margin-top: 30px;">
                         <button class="btn btn-success" onclick="saveSettings()">💾 Save Settings</button>
                         <button class="btn btn-danger" onclick="cleanupOldData()">🗑️ Cleanup Old Data</button>
                     </div>
-                    
+
                     <div id="settingsAlert"></div>
                 </div>
             </div>
         </div>
-        
+
         <script>
             let authToken = localStorage.getItem('adminToken') || '';
             let currentSection = 'dashboard';
             let allEmployees = [];
             let filteredEmployees = [];
             let currentReportTab = 'daily';
-            
+
             // Check if already logged in
             if (authToken) {
                 showDashboard();
                 loadDashboardData();
             }
-            
+
             // Set default dates
             document.addEventListener('DOMContentLoaded', function() {
                 const today = new Date().toISOString().split('T')[0];
@@ -1283,46 +1283,46 @@ def dashboard():
                 thisWeek.setDate(thisWeek.getDate() - thisWeek.getDay());
                 const weekStart = thisWeek.toISOString().split('T')[0];
                 const thisMonth = new Date().toISOString().substr(0, 7);
-                
+
                 if(document.getElementById('dailyDate')) document.getElementById('dailyDate').value = today;
                 if(document.getElementById('weeklyDate')) document.getElementById('weeklyDate').value = weekStart;
                 if(document.getElementById('monthlyDate')) document.getElementById('monthlyDate').value = thisMonth;
             });
-            
+
             async function login(event) {
                 event.preventDefault();
-                
+
                 document.getElementById('loginAlert').innerHTML = '';
-                
+
                 const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
-                
+
                 if (!username || !password) {
                     showAlert('loginAlert', 'Please enter both username and password', 'error');
                     return;
                 }
-                
+
                 const loginButton = event.target.querySelector('button[type="submit"]');
                 const originalText = loginButton.textContent;
                 loginButton.textContent = 'Logging in...';
                 loginButton.disabled = true;
-                
+
                 try {
                     console.log('Attempting login with username:', username);
-                    
+
                     const response = await fetch('/api/admin/login', {
                         method: 'POST',
-                        headers: { 
+                        headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json'
                         },
                         body: JSON.stringify({ username: username, password: password })
                     });
-                    
+
                     console.log('Login response status:', response.status);
                     const responseData = await response.text();
                     console.log('Login response data:', responseData);
-                    
+
                     if (response.ok) {
                         const data = JSON.parse(responseData);
                         if (data.access_token) {
@@ -1352,41 +1352,41 @@ def dashboard():
                     loginButton.disabled = false;
                 }
             }
-            
+
             function showDashboard() {
                 document.getElementById('loginScreen').style.display = 'none';
                 document.getElementById('dashboardScreen').style.display = 'block';
             }
-            
+
             function logout() {
                 authToken = '';
                 localStorage.removeItem('adminToken');
                 document.getElementById('loginScreen').style.display = 'flex';
                 document.getElementById('dashboardScreen').style.display = 'none';
             }
-            
+
             function showSection(section) {
                 document.querySelectorAll('.nav-menu a').forEach(a => a.classList.remove('active'));
                 document.querySelector('.nav-menu a[onclick*="' + section + '"]').classList.add('active');
-                
+
                 // Hide all sections
                 document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
-                
+
                 // Show selected section
                 document.getElementById(section + 'Section').classList.add('active');
-                
+
                 // Update page title
                 const titles = {
                     'dashboard': 'Dashboard',
-                    'users': 'Employee Management', 
+                    'users': 'Employee Management',
                     'reports': 'Reports & Analytics',
                     'agent': 'Agent Download',
                     'settings': 'System Settings'
                 };
                 document.getElementById('pageTitle').textContent = titles[section];
-                
+
                 currentSection = section;
-                
+
                 // Load section-specific data
                 if (section === 'users') {
                     loadEmployees();
@@ -1397,7 +1397,7 @@ def dashboard():
                     if (currentReportTab === 'daily') loadDailyReport();
                 }
             }
-            
+
             async function makeAuthenticatedRequest(url, options = {}) {
                 try {
                     const response = await fetch(url, {
@@ -1407,13 +1407,13 @@ def dashboard():
                             ...options.headers
                         }
                     });
-                    
+
                     if (response.status === 401) {
                         console.log('Token expired, redirecting to login');
                         logout();
                         return null;
                     }
-                    
+
                     return response;
                 } catch (error) {
                     console.error('Request failed:', error);
@@ -1424,20 +1424,20 @@ def dashboard():
             async function loadDashboardData() {
                 try {
                     const response = await makeAuthenticatedRequest('/api/admin/employees/status');
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
                         const employees = data.employees || [];
-                        
+
                         const online = employees.filter(e => e.status === 'online').length;
                         const offline = employees.filter(e => e.status === 'offline').length;
-                        
+
                         document.getElementById('totalEmployees').textContent = employees.length;
                         document.getElementById('onlineEmployees').textContent = online;
                         document.getElementById('offlineEmployees').textContent = offline;
-                        
+
                         // Show recent activity
-                        const activityHtml = employees.map(emp => 
+                        const activityHtml = employees.map(emp =>
                             '<div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;">' +
                                 '<div>' +
                                     '<strong>' + emp.username + '</strong> (' + emp.hostname + ')' +
@@ -1448,7 +1448,7 @@ def dashboard():
                                 '</div>' +
                             '</div>'
                         ).join('');
-                        
+
                         document.getElementById('recentActivity').innerHTML = activityHtml || '<p>No employee data available</p>';
                     } else if (response === null) {
                         // Token expired, user was redirected to login
@@ -1458,15 +1458,15 @@ def dashboard():
                     console.error('Failed to load dashboard data:', error);
                 }
             }
-            
+
             async function loadEmployees() {
                 try {
                     const response = await makeAuthenticatedRequest('/api/admin/employees/status');
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
                         const employees = data.employees || [];
-                        
+
                         let tableHtml = '<table class="table">' +
                             '<thead>' +
                                 '<tr>' +
@@ -1480,7 +1480,7 @@ def dashboard():
                                 '</tr>' +
                             '</thead>' +
                             '<tbody>';
-                            
+
                         employees.forEach(emp => {
                             tableHtml += '<tr>' +
                                 '<td><strong>' + emp.username + '</strong></td>' +
@@ -1497,14 +1497,14 @@ def dashboard():
                                 '</td>' +
                                 '<td>' + new Date(emp.last_seen).toLocaleString() + '</td>' +
                                 '<td>' +
-                                    '<button class="btn btn-primary-sm" onclick="viewEmployeeLogs(\'' + emp.username + '\')"'>View Logs</button>' +
-                                    '<button class="btn btn-success" onclick="viewWorkingHours(\'' + emp.username + '\')"'>Working Hours</button>' +
+                                    '<button class="btn btn-primary-sm" onclick="viewEmployeeLogs(\'' + emp.username + '\')">View Logs</button>' +
+                                    '<button class="btn btn-success" onclick="viewWorkingHours(\'' + emp.username + '\')">Working Hours</button>' +
                                 '</td>' +
                             '</tr>';
                         });
-                        
+
                         tableHtml += '</tbody></table>';
-                        
+
                         allEmployees = employees;
                         filteredEmployees = [...employees];
                         displayEmployees(filteredEmployees);
@@ -1518,7 +1518,7 @@ def dashboard():
                     document.getElementById('employeesList').innerHTML = '<p>Error loading employees</p>';
                 }
             }
-            
+
             function displayEmployees(employees) {
                 let tableHtml = '<table class="table">' +
                     '<thead>' +
@@ -1533,7 +1533,7 @@ def dashboard():
                         '</tr>' +
                     '</thead>' +
                     '<tbody>';
-                    
+
                 employees.forEach(emp => {
                     tableHtml += '<tr>' +
                         '<td><strong>' + emp.username + '</strong></td>' +
@@ -1550,34 +1550,34 @@ def dashboard():
                         '</td>' +
                         '<td>' + new Date(emp.last_seen).toLocaleString() + '</td>' +
                         '<td>' +
-                            '<button class="btn btn-primary-sm" onclick="viewEmployeeLogs(\'' + emp.username + '\')"'>View Logs</button>' +
-                            '<button class="btn btn-success" onclick="viewWorkingHours(\'' + emp.username + '\')"'>Working Hours</button>' +
+                            '<button class="btn btn-primary-sm" onclick="viewEmployeeLogs(\'' + emp.username + '\')">View Logs</button>' +
+                            '<button class="btn btn-success" onclick="viewWorkingHours(\'' + emp.username + '\')">Working Hours</button>' +
                         '</td>' +
                     '</tr>';
                 });
-                
+
                 tableHtml += '</tbody></table>';
-                
+
                 document.getElementById('employeesList').innerHTML = employees.length ? tableHtml : '<p>No employees found</p>';
             }
-            
+
             function filterEmployees() {
                 const searchTerm = document.getElementById('employeeSearch').value.toLowerCase();
                 const statusFilter = document.getElementById('statusFilter').value;
-                
+
                 filteredEmployees = allEmployees.filter(emp => {
-                    const matchesSearch = emp.username.toLowerCase().includes(searchTerm) || 
+                    const matchesSearch = emp.username.toLowerCase().includes(searchTerm) ||
                                         emp.hostname.toLowerCase().includes(searchTerm);
                     const matchesStatus = !statusFilter || emp.status === statusFilter;
                     return matchesSearch && matchesStatus;
                 });
-                
+
                 sortEmployees();
             }
-            
+
             function sortEmployees() {
                 const sortBy = document.getElementById('sortBy').value;
-                
+
                 filteredEmployees.sort((a, b) => {
                     switch(sortBy) {
                         case 'name':
@@ -1592,40 +1592,40 @@ def dashboard():
                             return 0;
                     }
                 });
-                
+
                 displayEmployees(filteredEmployees);
             }
-            
+
             function refreshEmployees() {
                 loadEmployees();
             }
-            
+
             // Report Tab Functions
             function showReportTab(tabName) {
                 document.querySelectorAll('.report-tab').forEach(tab => tab.classList.remove('active'));
                 document.querySelector('.report-tab[onclick*="' + tabName + '"]').classList.add('active');
-                
+
                 // Hide all tab content
                 document.querySelectorAll('.report-content').forEach(content => content.style.display = 'none');
-                
+
                 // Show selected tab content
                 document.getElementById(tabName + 'ReportTab').style.display = 'block';
-                
+
                 currentReportTab = tabName;
             }
-            
+
             async function loadDailyReport() {
                 const date = document.getElementById('dailyDate').value;
                 if (!date) return;
-                
+
                 try {
                     const response = await makeAuthenticatedRequest('/api/admin/reports/daily?date=' + date);
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
-                        
+
                         let reportHtml = '<div class="export-buttons">' +
-                                '<button class="btn btn-success" onclick="exportReport(\\\'daily\\\', \\\'' + date + '\\\')">📊 Export CSV</button>' +
+                                '<button class="btn btn-success" onclick="exportReport(\'daily\', \'' + date + '\')">📊 Export CSV</button>' +
                             '</div>' +
                             '<div class="summary-grid">' +
                                 '<div class="summary-card">' +
@@ -1656,11 +1656,11 @@ def dashboard():
                                         '</tr>' +
                                     '</thead>' +
                                     '<tbody>';
-                                    
+
                         data.employees.forEach(emp => {
                             const percentage = Math.min((emp.hours_worked / 8) * 100, 100);
                             const progressColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
-                            
+
                             reportHtml += '<tr>' +
                                 '<td><strong>' + emp.username + '</strong></td>' +
                                 '<td>' + emp.hours_worked + 'h</td>' +
@@ -1676,30 +1676,30 @@ def dashboard():
                                 '<td>' + emp.logs_count + '</td>' +
                             '</tr>';
                         });
-                        
+
                         reportHtml += '</tbody>' +
                             '</table>' +
                         '</div>';
-                        
+
                         document.getElementById('dailyReportContent').innerHTML = reportHtml;
                     }
                 } catch (error) {
                     document.getElementById('dailyReportContent').innerHTML = '<p>Error loading report</p>';
                 }
             }
-            
+
             async function loadWeeklyReport() {
                 const startDate = document.getElementById('weeklyDate').value;
                 if (!startDate) return;
-                
+
                 try {
                     const response = await makeAuthenticatedRequest('/api/admin/reports/weekly?start_date=' + startDate);
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
-                        
+
                         let reportHtml = '<div class="export-buttons">' +
-                                '<button class="btn btn-success" onclick="exportReport(\\\'weekly\\\', \\\'' + startDate + '\\\')">📊 Export CSV</button>' +
+                                '<button class="btn btn-success" onclick="exportReport(\'weekly\', \'' + startDate + '\')">📊 Export CSV</button>' +
                             '</div>' +
                             '<div class="summary-grid">' +
                                 '<div class="summary-card">' +
@@ -1723,61 +1723,61 @@ def dashboard():
                                         '</tr>' +
                                     '</thead>' +
                                     '<tbody>';
-                                    
+
                         data.employees.forEach(emp => {
                             reportHtml += '<tr>' +
                                 '<td><strong>' + emp.username + '</strong></td>' +
                                 '<td>' + emp.total_hours + 'h</td>' +
                                 '<td>' + emp.average_daily_hours + 'h</td>';
-                            
+
                             emp.daily_breakdown.forEach(day => {
                                 reportHtml += '<td>' + day.hours_worked + 'h</td>';
                             });
-                            
+
                             reportHtml += '</tr>';
                         });
-                        
+
                         reportHtml += '</tbody>' +
                             '</table>' +
                         '</div>';
-                        
+
                         document.getElementById('weeklyReportContent').innerHTML = reportHtml;
                     }
                 } catch (error) {
                     document.getElementById('weeklyReportContent').innerHTML = '<p>Error loading report</p>';
                 }
             }
-            
+
             async function loadMonthlyReport() {
                 const monthDate = document.getElementById('monthlyDate').value;
                 if (!monthDate) return;
-                
+
                 // Convert YYYY-MM to start and end dates
                 const startDate = monthDate + '-01';
                 const nextMonth = new Date(monthDate + '-01');
                 nextMonth.setMonth(nextMonth.getMonth() + 1);
                 const endDate = nextMonth.toISOString().split('T')[0];
-                
+
                 loadCustomReport(startDate, endDate, 'monthlyReportContent');
             }
-            
+
             async function loadCustomReport(startDate = null, endDate = null, targetElement = 'customReportContent') {
                 if (!startDate) startDate = document.getElementById('customFromDate').value;
                 if (!endDate) endDate = document.getElementById('customToDate').value;
-                
+
                 if (!startDate || !endDate) {
                     document.getElementById(targetElement).innerHTML = '<p>Please select both start and end dates</p>';
                     return;
                 }
-                
+
                 try {
                     const response = await makeAuthenticatedRequest('/api/admin/reports/range?start_date=' + startDate + '&end_date=' + endDate);
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
-                        
+
                         let reportHtml = '<div class="export-buttons">' +
-                                '<button class="btn btn-success" onclick="exportReport(\\\'custom\\\', \\\'' + startDate + '_' + endDate + '\\\')">📊 Export CSV</button>' +
+                                '<button class="btn btn-success" onclick="exportReport(\'custom\', \'' + startDate + '_' + endDate + '\')">📊 Export CSV</button>' +
                             '</div>' +
                             '<div class="summary-grid">' +
                                 '<div class="summary-card">' +
@@ -1815,7 +1815,7 @@ def dashboard():
                                         '</tr>' +
                                     '</thead>' +
                                     '<tbody>';
-                                        
+
                         data.employees.forEach(emp => {
                             reportHtml += '<tr>' +
                                 '<td><strong>' + emp.username + '</strong></td>' +
@@ -1826,28 +1826,28 @@ def dashboard():
                                 '<td>' + new Date(emp.last_activity).toLocaleString() + '</td>' +
                             '</tr>';
                         });
-                        
+
                         reportHtml += '</tbody>' +
                                 '</table>' +
                             '</div>';
-                        
+
                         document.getElementById(targetElement).innerHTML = reportHtml;
                     }
                 } catch (error) {
                     document.getElementById(targetElement).innerHTML = '<p>Error loading report</p>';
                 }
             }
-            
+
             function exportReport(type, date) {
                 // Simple CSV export functionality
                 let csvContent = '';
                 const table = document.querySelector('#' + currentReportTab + 'ReportContent table');
-                
+
                 if (table) {
                     // Get table headers
                     const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
                     csvContent += headers.join(',') + '\n';
-                    
+
                     // Get table rows
                     const rows = Array.from(table.querySelectorAll('tbody tr'));
                     rows.forEach(row => {
@@ -1857,7 +1857,7 @@ def dashboard():
                         });
                         csvContent += cells.join(',') + '\n';
                     });
-                    
+
                     // Download CSV
                     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                     const link = document.createElement('a');
@@ -1868,18 +1868,18 @@ def dashboard():
                     alert('No report data available to export');
                 }
             }
-            
+
             async function viewEmployeeLogs(username) {
                 try {
                     const response = await makeAuthenticatedRequest('/api/admin/employees/' + username + '/logs?days=7');
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
                         const logs = data.logs || [];
-                        
+
                         let logDetails = '<h3>📋 Logs for ' + username + ' (Last 7 days)</h3>';
                         logDetails += '<p><strong>Total logs:</strong> ' + logs.length + '</p>';
-                        
+
                         if (logs.length > 0) {
                             logDetails += '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0;">';
                             logs.forEach(log => {
@@ -1897,7 +1897,7 @@ def dashboard():
                         } else {
                             logDetails += '<p>No logs found for the selected period.</p>';
                         }
-                        
+
                         showModal('Employee Logs', logDetails);
                     } else if (response === null) {
                         // Token expired, user was redirected to login
@@ -1909,30 +1909,30 @@ def dashboard():
                     showModal('Error', '<p>Error loading logs: ' + error.message + '</p>');
                 }
             }
-            
+
             async function viewWorkingHours(username) {
                 try {
                     const today = new Date().toISOString().split('T')[0];
                     const response = await makeAuthenticatedRequest('/api/admin/employees/' + username + '/working-hours?date=' + today);
-                    
+
                     if (response && response.ok) {
                         const data = await response.json();
-                        
+
                         let hoursDetails = '<h3>⏰ Working Hours for ' + username + '</h3>';
                         hoursDetails += '<p><strong>Date:</strong> ' + data.date + '</p>';
                         hoursDetails += '<p><strong>Total Hours:</strong> ' + data.total_hours + ' hours</p>';
-                        
+
                         if (data.first_seen && data.last_seen) {
                             const firstSeen = new Date(data.first_seen).toLocaleTimeString();
                             const lastSeen = new Date(data.last_seen).toLocaleTimeString();
                             hoursDetails += '<p><strong>First Activity:</strong> ' + firstSeen + '</p>';
                             hoursDetails += '<p><strong>Last Activity:</strong> ' + lastSeen + '</p>';
-                            
+
                             // Add visual progress bar
                             const maxHours = 8;
                             const percentage = Math.min((data.total_hours / maxHours) * 100, 100);
                             const barColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
-                            
+
                             hoursDetails += '<div style="margin: 15px 0;">' +
                                 '<div style="background: #f8f9fa; border-radius: 10px; height: 20px; position: relative;">' +
                                     '<div style="background: ' + barColor + '; height: 100%; width: ' + percentage + '%; border-radius: 10px; transition: width 0.3s;"></div>' +
@@ -1944,7 +1944,7 @@ def dashboard():
                         } else {
                             hoursDetails += '<p><em>No activity recorded for today</em></p>';
                         }
-                        
+
                         showModal('Working Hours', hoursDetails);
                     } else if (response === null) {
                         // Token expired, user was redirected to login
@@ -1956,7 +1956,7 @@ def dashboard():
                     showModal('Error', '<p>Error loading working hours: ' + error.message + '</p>');
                 }
             }
-            
+
             function showModal(title, content) {
                 // Create modal if it doesn't exist
                 let modal = document.getElementById('customModal');
@@ -1964,13 +1964,13 @@ def dashboard():
                     modal = document.createElement('div');
                     modal.id = 'customModal';
                     modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;';
-                    
+
                     const modalContent = document.createElement('div');
                     modalContent.style.cssText = 'background: white; padding: 20px; border-radius: 10px; max-width: 80%; max-height: 80%; overflow-y: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.3);';
-                    
+
                     modal.appendChild(modalContent);
                     document.body.appendChild(modal);
-                    
+
                     // Close modal when clicking outside
                     modal.addEventListener('click', (e) => {
                         if (e.target === modal) {
@@ -1978,30 +1978,30 @@ def dashboard():
                         }
                     });
                 }
-                
+
                 const modalContent = modal.querySelector('div');
                 modalContent.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">' +
                         '<h2 style="margin: 0; color: #333;">' + title + '</h2>' +
                         '<button onclick="closeModal()" style="background: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer; font-size: 18px;">&times;</button>' +
                     '</div>' +
                     '<div>' + content + '</div>';
-                
+
                 modal.style.display = 'flex';
             }
-            
+
             function closeModal() {
                 const modal = document.getElementById('customModal');
                 if (modal) {
                     modal.style.display = 'none';
                 }
             }
-            
+
             function downloadAgent(platform) {
                 if (!authToken) {
                     alert('Please login first');
                     return;
                 }
-                
+
                 // Use fetch to download with proper auth
                 fetch('/download/agent/' + platform, {
                     headers: { 'Authorization': 'Bearer ' + authToken }
@@ -2025,42 +2025,42 @@ def dashboard():
                     alert('Download failed: ' + error.message);
                 });
             }
-            
+
             function saveSettings() {
                 showAlert('settingsAlert', 'Settings saved successfully!', 'success');
             }
-            
+
             async function cleanupOldData() {
                 if (!confirm('Are you sure you want to cleanup old data? This cannot be undone.')) {
                     return;
                 }
-                
+
                 try {
                     const response = await fetch('/api/admin/cleanup', {
                         headers: { 'Authorization': 'Bearer ' + authToken }
                     });
-                    
+
                     if (response.ok) {
                         const data = await response.json();
-                        showAlert('settingsAlert', 
-                            'Cleanup completed: ' + data.deleted_heartbeats + ' heartbeats, ' + data.deleted_logs + ' logs, ' + data.deleted_screenshots + ' screenshots deleted', 
+                        showAlert('settingsAlert',
+                            'Cleanup completed: ' + data.deleted_heartbeats + ' heartbeats, ' + data.deleted_logs + ' logs, ' + data.deleted_screenshots + ' screenshots deleted',
                             'success');
                     }
                 } catch (error) {
                     showAlert('settingsAlert', 'Cleanup failed: ' + error.message, 'error');
                 }
             }
-            
+
             function showAlert(containerId, message, type) {
                 const alertClass = type === 'error' ? 'alert-error' : 'alert-success';
-                document.getElementById(containerId).innerHTML = 
+                document.getElementById(containerId).innerHTML =
                     '<div class="alert ' + alertClass + '">' + message + '</div>';
-                
+
                 setTimeout(() => {
                     document.getElementById(containerId).innerHTML = '';
                 }, 5000);
             }
-            
+
             // Auto refresh dashboard data every 30 seconds
             setInterval(() => {
                 if (authToken && currentSection === 'dashboard') {
@@ -2078,18 +2078,18 @@ def download_agent(platform: str, admin=Depends(verify_admin_token)):
     """Download agent installer for specified platform"""
     import zipfile
     import io
-    
+
     if platform not in ['windows', 'mac', 'linux']:
         raise HTTPException(status_code=400, detail="Invalid platform")
-    
+
     # Create agent installer package in memory
     zip_buffer = io.BytesIO()
-    
+
     try:
         # Read agent file content
         agent_paths = ['../agent/agent.py', 'agent/agent.py', './agent/agent.py']
         agent_content = None
-        
+
         for path in agent_paths:
             try:
                 with open(path, 'r') as f:
@@ -2097,7 +2097,7 @@ def download_agent(platform: str, admin=Depends(verify_admin_token)):
                 break
             except FileNotFoundError:
                 continue
-        
+
         if not agent_content:
             # Create a basic agent if file not found
             agent_content = '''#!/usr/bin/env python3
@@ -2121,7 +2121,7 @@ def send_heartbeat():
         "hostname": socket.gethostname(),
         "status": "online"
     }
-    
+
     try:
         response = requests.post(
             f"{SERVER_URL}/api/heartbeat",
@@ -2139,24 +2139,24 @@ if __name__ == "__main__":
         send_heartbeat()
         time.sleep(300)  # 5 minutes
 '''
-        
+
         # Update server URL in agent content with current deployment URL
         repl_id = os.getenv("REPL_ID", "")
         repl_slug = os.getenv("REPL_SLUG", "")
-        
+
         # Try to get the current server URL from the request
         current_url = "https://e1cdd19c-fdf6-4b9f-94bf-b122742d048e-00-2ltrq5fmw548e.riker.replit.dev"
-        
+
         # Replace the placeholder URL with the actual server URL
         agent_content = agent_content.replace(
             'SERVER_URL = "https://your-repl-name.replit.app"',
             f'SERVER_URL = "{current_url}"'
         )
-        
+
         # Read requirements file content
         requirements_paths = ['../agent/agent_requirements.txt', 'agent/agent_requirements.txt', './agent/agent_requirements.txt']
         requirements_content = None
-        
+
         for path in requirements_paths:
             try:
                 with open(path, 'r') as f:
@@ -2164,7 +2164,7 @@ if __name__ == "__main__":
                 break
             except FileNotFoundError:
                 continue
-        
+
         if not requirements_content:
             # Create basic requirements if file not found
             requirements_content = """requests>=2.31.0
@@ -2172,12 +2172,12 @@ schedule>=1.2.0
 Pillow>=10.0.0
 psutil>=5.9.0
 """
-        
+
         # Create ZIP file with all content
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             zip_file.writestr('agent.py', agent_content)
             zip_file.writestr('agent_requirements.txt', requirements_content)
-        
+
         # Add platform-specific instructions
             instructions = f"""
 # WFH Monitoring Agent Setup - {platform.title()}
@@ -2198,7 +2198,7 @@ psutil>=5.9.0
 
 ## Platform-specific Notes:
 """
-            
+
             if platform == 'windows':
                 instructions += """
 ### Windows Setup:
@@ -2207,7 +2207,7 @@ psutil>=5.9.0
   %APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\
 - For service installation, use nssm or similar tools
 """
-                
+
                 # Windows service installation script
                 windows_script = """@echo off
 echo Installing WFH Monitoring Agent for Windows...
@@ -2228,15 +2228,15 @@ echo To run in background: start /b python agent.py
 pause
 """
                 zip_file.writestr('install.bat', windows_script)
-                
+
             elif platform == 'mac':
                 instructions += """
-### macOS Setup:  
+### macOS Setup:
 - May need to allow Python in Privacy & Security settings
 - For startup: Create LaunchAgent plist file in ~/Library/LaunchAgents/
 - Grant screen recording permissions in System Preferences
 """
-                
+
                 # macOS installation script
                 mac_script = """#!/bin/bash
 echo "Installing WFH Monitoring Agent for macOS..."
@@ -2251,7 +2251,7 @@ echo "Run: python3 agent.py"
 echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 """
                 zip_file.writestr('install.sh', mac_script)
-                
+
             elif platform == 'linux':
                 instructions += """
 ### Linux Setup:
@@ -2259,7 +2259,7 @@ echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 - For startup: Create systemd service or add to ~/.profile
 - May need to install python3-tk for screenshot functionality
 """
-                
+
                 # Linux installation script
                 linux_script = """#!/bin/bash
 echo "Installing WFH Monitoring Agent for Linux..."
@@ -2274,16 +2274,16 @@ echo "Run: python3 agent.py"
 echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 """
                 zip_file.writestr('install.sh', linux_script)
-            
+
             zip_file.writestr('README.txt', instructions)
-        
+
         zip_buffer.seek(0)
         return StreamingResponse(
             io.BytesIO(zip_buffer.read()),
             media_type="application/zip",
             headers={"Content-Disposition": f"attachment; filename=wfh-agent-{platform}.zip"}
         )
-        
+
     except Exception as e:
         print(f"Error creating agent package: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to create agent package: {str(e)}")
