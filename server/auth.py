@@ -10,7 +10,7 @@ from database import get_db, AdminUser
 # Configuration
 SECRET_KEY = "your-secret-key-change-this-in-production"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 hours
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440  # 24 hours
 
 # Auth token for agents (simple token-based auth)
 AGENT_TOKEN = "agent-secret-token-change-this-in-production"

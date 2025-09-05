@@ -30,8 +30,11 @@ screenshots_dir = "screenshots"
 os.makedirs(screenshots_dir, exist_ok=True)
 
 # Serve static files from React build
-app.mount("/static", StaticFiles(directory="../frontend/dist/assets"), name="static")
-app.mount("/assets", StaticFiles(directory="../frontend/dist/assets"), name="assets")
+try:
+    app.mount("/assets", StaticFiles(directory="../frontend/dist/assets"), name="assets")
+    app.mount("/static", StaticFiles(directory="../frontend/dist"), name="static")
+except Exception as e:
+    print(f"Warning: Could not mount static files: {e}")
 
 # Pydantic models
 class HeartbeatData(BaseModel):
@@ -599,16 +602,41 @@ def get_range_report(
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
     try:
-        with open("../frontend/dist/index.html", "r") as f:
-            return f.read()
+        with open("../frontend/dist/index.html", "r", encoding="utf-8") as f:
+            content = f.read()
+            # Ensure proper base path for assets
+            content = content.replace('href="/assets/', 'href="./assets/')
+            content = content.replace('src="/assets/', 'src="./assets/')
+            return content
     except FileNotFoundError:
         return """
+        <!DOCTYPE html>
         <html>
-        <head><title>WFH Monitoring System</title></head>
+        <head>
+            <title>WFH Monitoring System - Setup Required</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                .container { max-width: 600px; margin: 0 auto; }
+                .error { background: #f8d7da; color: #721c24; padding: 15px; border-radius: 5px; }
+                .steps { background: #d1ecf1; color: #0c5460; padding: 15px; border-radius: 5px; }
+            </style>
+        </head>
         <body>
-        <h1>React frontend not built yet</h1>
-        <p>Please run: <code>cd frontend && npm install && npm run build</code></p>
-        <p>Then restart the server.</p>
+            <div class="container">
+                <h1>🏗️ Setup Required</h1>
+                <div class="error">
+                    <strong>React frontend not built yet</strong>
+                </div>
+                <div class="steps">
+                    <h3>To complete setup:</h3>
+                    <ol>
+                        <li>The frontend is building automatically</li>
+                        <li>Please wait a moment and refresh this page</li>
+                        <li>If issues persist, check the console logs</li>
+                    </ol>
+                </div>
+                <p><strong>Default Login:</strong> admin / admin123</p>
+            </div>
         </body>
         </html>"""
 

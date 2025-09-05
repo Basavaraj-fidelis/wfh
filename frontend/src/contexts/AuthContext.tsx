@@ -26,6 +26,17 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [token, setToken] = useState<string | null>(localStorage.getItem('adminToken'));
 
+  // Check if token is expired
+  const isTokenValid = (token: string): boolean => {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const currentTime = Date.now() / 1000;
+      return payload.exp > currentTime;
+    } catch {
+      return false;
+    }
+  };
+
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
       const response = await axios.post('/api/admin/login', {
@@ -34,8 +45,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (response.data.access_token) {
-        setToken(response.data.access_token);
-        localStorage.setItem('adminToken', response.data.access_token);
+        const newToken = response.data.access_token;
+        setToken(newToken);
+        localStorage.setItem('adminToken', newToken);
         return true;
       }
       return false;
@@ -50,7 +62,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     localStorage.removeItem('adminToken');
   };
 
-  const isAuthenticated = !!token;
+  const isAuthenticated = !!token && isTokenValid(token);
+
+  // Auto-logout if token is expired
+  React.useEffect(() => {
+    if (token && !isTokenValid(token)) {
+      logout();
+    }
+  }, [token]);
 
   // Set up axios interceptor for authentication
   useEffect(() => {
