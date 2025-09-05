@@ -56,17 +56,29 @@ class WorkingHoursResponse(BaseModel):
 # Initialize database on startup
 @app.on_event("startup")
 def startup_event():
-    create_tables()
-    # Create default admin user if none exists
-    db = next(get_db())
-    admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
-    if not admin:
-        hashed_password = get_password_hash("admin123")
-        admin_user = AdminUser(username="admin", hashed_password=hashed_password)
-        db.add(admin_user)
-        db.commit()
-        print("Default admin user created: admin/admin123")
-    db.close()
+    try:
+        print("Starting up application...")
+        create_tables()
+        print("Database tables created successfully")
+        
+        # Create default admin user if none exists
+        db = next(get_db())
+        admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
+        if not admin:
+            print("Creating default admin user...")
+            hashed_password = get_password_hash("admin123")
+            admin_user = AdminUser(username="admin", hashed_password=hashed_password)
+            db.add(admin_user)
+            db.commit()
+            print("Default admin user created: admin/admin123")
+        else:
+            print("Admin user already exists")
+        db.close()
+        print("Application startup completed successfully")
+    except Exception as e:
+        print(f"Startup error: {e}")
+        import traceback
+        traceback.print_exc()
 
 # Agent endpoints
 @app.post("/api/heartbeat")
@@ -149,12 +161,27 @@ def receive_detailed_log(
 @app.post("/api/admin/login")
 def admin_login(login_data: AdminLogin, db: Session = Depends(get_db)):
     """Admin login endpoint"""
-    admin = db.query(AdminUser).filter(AdminUser.username == login_data.username).first()
-    if not admin or not verify_password(login_data.password, admin.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-    access_token = create_access_token(data={"sub": admin.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+    try:
+        print(f"Login attempt for username: {login_data.username}")
+        admin = db.query(AdminUser).filter(AdminUser.username == login_data.username).first()
+        
+        if not admin:
+            print(f"Admin user not found: {login_data.username}")
+            raise HTTPException(status_code=401, detail="Incorrect username or password")
+            
+        if not verify_password(login_data.password, admin.hashed_password):
+            print(f"Password verification failed for: {login_data.username}")
+            raise HTTPException(status_code=401, detail="Incorrect username or password")
+        
+        print(f"Login successful for: {login_data.username}")
+        access_token = create_access_token(data={"sub": admin.username})
+        return {"access_token": access_token, "token_type": "bearer"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # Test endpoint for location services
 @app.get("/api/test/location/{ip}")
@@ -169,6 +196,27 @@ def test_location_service(ip: str):
             return {"status": "error", "code": response.status_code, "text": response.text}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+# Debug endpoint to check admin user and database
+@app.get("/api/debug/admin")
+def debug_admin_user(db: Session = Depends(get_db)):
+    """Debug endpoint to check admin user existence"""
+    try:
+        admin_count = db.query(AdminUser).count()
+        admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
+        
+        return {
+            "total_admin_users": admin_count,
+            "admin_user_exists": admin is not None,
+            "admin_username": admin.username if admin else None,
+            "admin_is_active": admin.is_active if admin else None,
+            "database_connected": True
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "database_connected": False
+        }
 
 # Admin dashboard endpoints
 @app.get("/api/admin/employees/status")
