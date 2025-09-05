@@ -163,24 +163,41 @@ class MonitoringAgent:
             print(f"[{datetime.now()}] Already sent 2 detailed logs today, skipping")
             return
         
+        screenshot_file = None
         try:
             print(f"[{datetime.now()}] Sending detailed log...")
             
             # Get network and location info
             local_ip = self.get_local_ip()
+            print(f"Local IP: {local_ip}")
+            
             public_ip = self.get_public_ip()
+            print(f"Public IP: {public_ip}")
+            
             location = self.get_location(public_ip)
+            print(f"Location data: {location}")
             
             # Take screenshot
             screenshot_file = self.take_screenshot()
             if not screenshot_file:
-                print("Failed to take screenshot, aborting detailed log")
-                return
-            
+                print("Failed to take screenshot, sending log without screenshot")
+                # Still send the log even without screenshot
+                
             # Prepare form data
-            files = {
-                'screenshot': open(screenshot_file, 'rb')
-            }
+            if screenshot_file and os.path.exists(screenshot_file):
+                files = {
+                    'screenshot': open(screenshot_file, 'rb')
+                }
+            else:
+                # Create a dummy file if screenshot failed
+                import tempfile
+                temp_file = tempfile.NamedTemporaryFile(suffix='.txt', delete=False)
+                temp_file.write(b'No screenshot available')
+                temp_file.close()
+                files = {
+                    'screenshot': open(temp_file.name, 'rb')
+                }
+                screenshot_file = temp_file.name
             
             data = {
                 'username': self.username,
@@ -189,6 +206,8 @@ class MonitoringAgent:
                 'public_ip': public_ip,
                 'location': location
             }
+            
+            print(f"Sending data: {data}")
             
             # Send to server
             headers = {'Authorization': f'Bearer {self.auth_token}'}
@@ -202,20 +221,31 @@ class MonitoringAgent:
             
             # Clean up temp screenshot
             files['screenshot'].close()
-            if os.path.exists(screenshot_file):
-                os.remove(screenshot_file)
             
+            print(f"Server response: {response.status_code}")
             if response.status_code == 200:
                 self.detailed_logs_today += 1
                 print(f"[{datetime.now()}] Detailed log sent successfully ({self.detailed_logs_today}/2 today)")
+                try:
+                    result = response.json()
+                    print(f"Server response: {result}")
+                except:
+                    print(f"Server response text: {response.text}")
             else:
                 print(f"[{datetime.now()}] Detailed log failed: {response.status_code}")
+                print(f"Error details: {response.text}")
                 
         except Exception as e:
             print(f"[{datetime.now()}] Detailed log error: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
             # Clean up temp file if it exists
-            if 'screenshot_file' in locals() and os.path.exists(screenshot_file):
-                os.remove(screenshot_file)
+            if screenshot_file and os.path.exists(screenshot_file):
+                try:
+                    os.remove(screenshot_file)
+                except:
+                    pass
     
     def schedule_detailed_logs(self):
         """Schedule 2 random detailed logs per day between 8 AM and 10 PM"""
@@ -254,13 +284,18 @@ class MonitoringAgent:
         # Send initial heartbeat
         self.send_heartbeat()
         
+        # Send a test detailed log immediately for testing
+        print("Sending test detailed log...")
+        self.send_detailed_log()
+        
         print("Agent started. Press Ctrl+C to stop.")
+        print("Commands: 't' = send test log, 'h' = send heartbeat")
         
         # Main loop
         try:
             while True:
                 schedule.run_pending()
-                time.sleep(30)  # Check every 30 seconds
+                time.sleep(5)  # Check every 5 seconds for faster testing
         except KeyboardInterrupt:
             print("\nAgent stopped by user.")
         except Exception as e:

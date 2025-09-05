@@ -98,29 +98,52 @@ def receive_detailed_log(
     db: Session = Depends(get_db)
 ):
     """Receive detailed log with screenshot from agent"""
-    # Save screenshot
-    timestamp = datetime.utcnow()
-    filename = f"{username}_{timestamp.strftime('%Y%m%d_%H%M%S')}.png"
-    screenshot_path = os.path.join(screenshots_dir, filename)
-    
-    with open(screenshot_path, "wb") as buffer:
-        content = screenshot.file.read()
-        buffer.write(content)
-    
-    # Save log to database
-    log_record = EmployeeLog(
-        username=username,
-        hostname=hostname,
-        local_ip=local_ip,
-        public_ip=public_ip,
-        location=location,
-        screenshot_path=screenshot_path,
-        timestamp=timestamp
-    )
-    db.add(log_record)
-    db.commit()
-    
-    return {"status": "success", "message": "Detailed log received", "screenshot_saved": filename}
+    try:
+        print(f"Received detailed log from {username}@{hostname}")
+        print(f"IPs: local={local_ip}, public={public_ip}")
+        print(f"Location: {location}")
+        
+        # Save screenshot
+        timestamp = datetime.utcnow()
+        filename = f"{username}_{timestamp.strftime('%Y%m%d_%H%M%S')}.png"
+        screenshot_path = os.path.join(screenshots_dir, filename)
+        
+        print(f"Saving screenshot to: {screenshot_path}")
+        
+        with open(screenshot_path, "wb") as buffer:
+            content = screenshot.file.read()
+            buffer.write(content)
+            print(f"Screenshot saved, size: {len(content)} bytes")
+        
+        # Save log to database
+        log_record = EmployeeLog(
+            username=username,
+            hostname=hostname,
+            local_ip=local_ip,
+            public_ip=public_ip,
+            location=location,
+            screenshot_path=screenshot_path,
+            timestamp=timestamp
+        )
+        
+        print(f"Saving log record to database...")
+        db.add(log_record)
+        db.commit()
+        print(f"Log record saved successfully with ID: {log_record.id}")
+        
+        return {
+            "status": "success", 
+            "message": "Detailed log received", 
+            "screenshot_saved": filename,
+            "log_id": log_record.id
+        }
+        
+    except Exception as e:
+        print(f"Error processing detailed log: {e}")
+        import traceback
+        traceback.print_exc()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to process log: {str(e)}")
 
 # Admin authentication
 @app.post("/api/admin/login")
@@ -132,6 +155,20 @@ def admin_login(login_data: AdminLogin, db: Session = Depends(get_db)):
     
     access_token = create_access_token(data={"sub": admin.username})
     return {"access_token": access_token, "token_type": "bearer"}
+
+# Test endpoint for location services
+@app.get("/api/test/location/{ip}")
+def test_location_service(ip: str):
+    """Test location lookup service"""
+    import requests
+    try:
+        response = requests.get(f'https://ipinfo.io/{ip}/json', timeout=10)
+        if response.status_code == 200:
+            return {"status": "success", "data": response.json()}
+        else:
+            return {"status": "error", "code": response.status_code, "text": response.text}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # Admin dashboard endpoints
 @app.get("/api/admin/employees/status")
