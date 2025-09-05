@@ -1,0 +1,94 @@
+I want to build a WFH employee monitoring system for my company. Please help me design and implement it step by step.
+
+🔹 Requirements
+1. Agent (Employee Laptop, Windows/Mac/Linux)
+
+Runs as a background service.
+
+Every 5 minutes → sends a small heartbeat JSON payload to the server:
+
+username
+
+hostname
+
+status = "online"
+
+timestamp
+
+Twice per working day (random times between 8 AM and 10 PM) → sends a detailed log payload:
+
+username
+
+hostname
+
+local IP + public IP
+
+approximate location (GeoIP lookup from public IP)
+
+screenshot of desktop
+
+timestamp
+
+Scheduling should ensure randomized detailed log times, but exactly 2 per day.
+
+All communication must be secure over HTTPS with authentication token.
+
+2. Central Server (Backend API)
+
+API endpoints:
+
+/api/heartbeat → store heartbeat pings.
+
+/api/log → store detailed logs.
+
+Store data in a PostgreSQL database:
+
+employee_heartbeats table (user, host, status, timestamp).
+
+employee_logs table (user, host, IPs, location, screenshot path, timestamp).
+
+Save screenshots on disk (e.g., /var/data/screenshots/) and store file path in DB.
+
+Retain logs and heartbeats for 30 days only (auto-delete older data).
+
+3. Dashboard (later phase, after backend is ready)
+
+Web UI (React or Django Admin).
+
+Features:
+
+Show last-seen status of employees (based on latest heartbeat).
+
+Show daily detailed logs with screenshot & IP/location.
+
+Filter logs by employee and date range (e.g., last 30 days).
+
+Export logs to CSV/PDF.
+
+🔹 Deliverables
+
+Step 1: Agent
+
+Python implementation of the agent.
+
+Handles 5-min heartbeat and random twice-daily detailed logs.
+
+Configurable server URL and auth token.
+
+Cross-platform startup (Windows Task Scheduler / Linux systemd / Mac LaunchAgent).
+
+Step 2: Server
+
+Backend API using FastAPI or Django REST.
+
+PostgreSQL schema for heartbeats + logs.
+
+Screenshot storage mechanism.
+
+API token-based authentication.
+
+Deployment instructions on Ubuntu server with Nginx + Gunicorn/Uvicorn.
+
+Step 3: Dashboard (Optional Later)
+
+Simple React or Django Admin frontend to view and manage logs.
