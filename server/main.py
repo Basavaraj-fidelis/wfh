@@ -906,25 +906,142 @@ def dashboard():
                     
                     if (response.ok) {
                         const data = await response.json();
-                        alert(`${username} has ${data.logs.length} logs in the last 7 days`);
+                        const logs = data.logs || [];
+                        
+                        let logDetails = `<h3>📋 Logs for ${username} (Last 7 days)</h3>`;
+                        logDetails += `<p><strong>Total logs:</strong> ${logs.length}</p>`;
+                        
+                        if (logs.length > 0) {
+                            logDetails += '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0;">';
+                            logs.forEach(log => {
+                                const logDate = new Date(log.timestamp).toLocaleString();
+                                logDetails += `
+                                    <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
+                                        <strong>📅 ${logDate}</strong><br>
+                                        <strong>🖥️ Hostname:</strong> ${log.hostname}<br>
+                                        <strong>🌐 Local IP:</strong> ${log.local_ip}<br>
+                                        <strong>🌍 Public IP:</strong> ${log.public_ip}<br>
+                                        <strong>📍 Location:</strong> ${log.location}<br>
+                                        <strong>📸 Screenshot:</strong> ${log.screenshot_path ? 'Available' : 'None'}
+                                    </div>
+                                `;
+                            });
+                            logDetails += '</div>';
+                        } else {
+                            logDetails += '<p>No logs found for the selected period.</p>';
+                        }
+                        
+                        showModal('Employee Logs', logDetails);
                     }
                 } catch (error) {
-                    alert('Error loading logs');
+                    showModal('Error', '<p>Error loading logs: ' + error.message + '</p>');
                 }
             }
             
             async function viewWorkingHours(username) {
                 try {
-                    const response = await fetch(`/api/admin/employees/${username}/working-hours`, {
+                    const today = new Date().toISOString().split('T')[0];
+                    const response = await fetch(`/api/admin/employees/${username}/working-hours?date=${today}`, {
                         headers: { 'Authorization': 'Bearer ' + authToken }
                     });
                     
                     if (response.ok) {
                         const data = await response.json();
-                        alert(`${username} worked ${data.total_hours} hours today (${data.date})`);
+                        
+                        let hoursDetails = `<h3>⏰ Working Hours for ${username}</h3>`;
+                        hoursDetails += `<p><strong>Date:</strong> ${data.date}</p>`;
+                        hoursDetails += `<p><strong>Total Hours:</strong> ${data.total_hours} hours</p>`;
+                        
+                        if (data.first_seen && data.last_seen) {
+                            const firstSeen = new Date(data.first_seen).toLocaleTimeString();
+                            const lastSeen = new Date(data.last_seen).toLocaleTimeString();
+                            hoursDetails += `<p><strong>First Activity:</strong> ${firstSeen}</p>`;
+                            hoursDetails += `<p><strong>Last Activity:</strong> ${lastSeen}</p>`;
+                            
+                            // Add visual progress bar
+                            const maxHours = 8;
+                            const percentage = Math.min((data.total_hours / maxHours) * 100, 100);
+                            const barColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
+                            
+                            hoursDetails += `
+                                <div style="margin: 15px 0;">
+                                    <div style="background: #f8f9fa; border-radius: 10px; height: 20px; position: relative;">
+                                        <div style="background: ${barColor}; height: 100%; width: ${percentage}%; border-radius: 10px; transition: width 0.3s;"></div>
+                                        <span style="position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: bold;">
+                                            ${data.total_hours}h / ${maxHours}h
+                                        </span>
+                                    </div>
+                                </div>
+                            `;
+                        } else {
+                            hoursDetails += '<p><em>No activity recorded for today</em></p>';
+                        }
+                        
+                        showModal('Working Hours', hoursDetails);
                     }
                 } catch (error) {
-                    alert('Error loading working hours');
+                    showModal('Error', '<p>Error loading working hours: ' + error.message + '</p>');
+                }
+            }
+            
+            function showModal(title, content) {
+                // Create modal if it doesn't exist
+                let modal = document.getElementById('customModal');
+                if (!modal) {
+                    modal = document.createElement('div');
+                    modal.id = 'customModal';
+                    modal.style.cssText = `
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        background: rgba(0,0,0,0.5);
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 1000;
+                    `;
+                    
+                    const modalContent = document.createElement('div');
+                    modalContent.style.cssText = `
+                        background: white;
+                        padding: 20px;
+                        border-radius: 10px;
+                        max-width: 80%;
+                        max-height: 80%;
+                        overflow-y: auto;
+                        position: relative;
+                        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                    `;
+                    
+                    modal.appendChild(modalContent);
+                    document.body.appendChild(modal);
+                    
+                    // Close modal when clicking outside
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            closeModal();
+                        }
+                    });
+                }
+                
+                const modalContent = modal.querySelector('div');
+                modalContent.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                        <h2 style="margin: 0; color: #333;">${title}</h2>
+                        <button onclick="closeModal()" style="background: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer; font-size: 18px;">&times;</button>
+                    </div>
+                    <div>${content}</div>
+                `;
+                
+                modal.style.display = 'flex';
+            }
+            
+            function closeModal() {
+                const modal = document.getElementById('customModal');
+                if (modal) {
+                    modal.style.display = 'none';
                 }
             }
             
