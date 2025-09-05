@@ -288,18 +288,20 @@ class MonitoringAgent:
         print("Sending test detailed log...")
         self.send_detailed_log()
         
-        print("Agent started. Press Ctrl+C to stop.")
-        print("Commands: 't' = send test log, 'h' = send heartbeat")
+        print("Agent started and running in background mode.")
+        print("Agent will continue running until process is terminated.")
         
-        # Main loop
+        # Main loop - no interactive input required
         try:
             while True:
                 schedule.run_pending()
-                time.sleep(5)  # Check every 5 seconds for faster testing
+                time.sleep(30)  # Check every 30 seconds for background service
         except KeyboardInterrupt:
             print("\nAgent stopped by user.")
         except Exception as e:
             print(f"Agent error: {e}")
+            # Log error but continue running
+            time.sleep(60)  # Wait 1 minute before continuing after error
 
 def main():
     """Main function - configure and start agent"""
