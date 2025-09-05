@@ -1,9 +1,9 @@
-modules = ["python-3.11", "bash", "postgresql-16"]
+modules = ["bash", "nodejs-20", "postgresql-16", "python-3.11"]
 [agent]
 expertMode = true
 
 [workflows]
-runButton = "Project"
+runButton = "Full Stack"
 
 [[workflows.workflow]]
 name = "Project"
@@ -25,6 +25,33 @@ outputType = "webview"
 task = "shell.exec"
 args = "cd server && python main.py"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Frontend Dev"
+author = 47261658
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm install && npm run dev"
+
+[[workflows.workflow]]
+name = "Build Frontend"
+author = 47261658
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm install && npm run build"
+
+[[workflows.workflow]]
+name = "Full Stack"
+author = 47261658
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd frontend && npm install && npm run build && cd ../server && python main.py"
 
 [[ports]]
 localPort = 5000

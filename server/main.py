@@ -29,6 +29,10 @@ app.add_middleware(
 screenshots_dir = "screenshots"
 os.makedirs(screenshots_dir, exist_ok=True)
 
+# Serve static files from React build
+app.mount("/static", StaticFiles(directory="../frontend/dist/assets"), name="static")
+app.mount("/assets", StaticFiles(directory="../frontend/dist/assets"), name="assets")
+
 # Pydantic models
 class HeartbeatData(BaseModel):
     username: str
@@ -591,9 +595,46 @@ def get_range_report(
         "employees": employee_data
     }
 
-# Admin dashboard with proper navigation and sections
+# Admin dashboard - serve React app
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
+    try:
+        with open("../frontend/dist/index.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return """
+        <html>
+        <head><title>WFH Monitoring System</title></head>
+        <body>
+        <h1>React frontend not built yet</h1>
+        <p>Please run: <code>cd frontend && npm install && npm run build</code></p>
+        <p>Then restart the server.</p>
+        </body>
+        </html>"""
+
+# Fallback route for React Router (catch-all)
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+def catch_all(full_path: str):
+    # Don't interfere with API routes
+    if full_path.startswith('api/') or full_path.startswith('download/'):
+        raise HTTPException(status_code=404, detail="Not found")
+    
+    try:
+        with open("../frontend/dist/index.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return """
+        <html>
+        <head><title>WFH Monitoring System</title></head>
+        <body>
+        <h1>React frontend not built yet</h1>
+        <p>Please run: <code>cd frontend && npm install && npm run build</code></p>
+        </body>
+        </html>"""
+
+# Legacy HTML dashboard (keep the old implementation as backup)
+@app.get("/legacy", response_class=HTMLResponse)
+def legacy_dashboard():
     return """
     <!DOCTYPE html>
     <html lang="en">
