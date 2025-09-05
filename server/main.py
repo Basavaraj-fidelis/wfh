@@ -1039,13 +1039,28 @@ def download_agent(platform: str, admin=Depends(verify_admin_token)):
     
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
         # Add main agent file
-        with open('../agent/agent.py', 'r') as f:
-            agent_content = f.read()
+        try:
+            with open('../agent/agent.py', 'r') as f:
+                agent_content = f.read()
+        except FileNotFoundError:
+            # If file not found, use relative path
+            with open('agent/agent.py', 'r') as f:
+                agent_content = f.read()
+        
+        # Update server URL in agent content
+        agent_content = agent_content.replace(
+            'SERVER_URL = "https://your-repl-name.replit.app"',
+            f'SERVER_URL = "{os.getenv("REPL_SLUG", "your-server-url")}.replit.app"'
+        )
         zip_file.writestr('agent.py', agent_content)
         
         # Add requirements
-        with open('../agent/agent_requirements.txt', 'r') as f:
-            requirements_content = f.read()
+        try:
+            with open('../agent/agent_requirements.txt', 'r') as f:
+                requirements_content = f.read()
+        except FileNotFoundError:
+            with open('agent/agent_requirements.txt', 'r') as f:
+                requirements_content = f.read()
         zip_file.writestr('agent_requirements.txt', requirements_content)
         
         # Add platform-specific instructions
@@ -1093,6 +1108,147 @@ def download_agent(platform: str, admin=Depends(verify_admin_token)):
 """
         
         zip_file.writestr('README.txt', instructions)
+        
+        # Add platform-specific installation scripts
+        if platform == 'windows':
+            # Windows batch script
+            windows_script = """@echo off
+echo Installing WFH Monitoring Agent for Windows...
+echo.
+echo Step 1: Installing Python dependencies...
+pip install -r agent_requirements.txt
+if %ERRORLEVEL% NEQ 0 (
+    echo Error: Failed to install dependencies. Please ensure Python and pip are installed.
+    pause
+    exit /b 1
+)
+
+echo.
+echo Step 2: Creating startup directory...
+mkdir "%APPDATA%\\WFH-Agent" 2>nul
+copy agent.py "%APPDATA%\\WFH-Agent\\"
+copy agent_requirements.txt "%APPDATA%\\WFH-Agent\\"
+
+echo.
+echo Step 3: Setting up auto-start...
+echo Creating startup shortcut...
+echo @echo off > "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\wfh-agent.bat"
+echo cd /d "%APPDATA%\\WFH-Agent" >> "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\wfh-agent.bat"
+echo python agent.py >> "%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\wfh-agent.bat"
+
+echo.
+echo Installation complete! Agent will start automatically on next reboot.
+echo To start now, run: python agent.py
+pause
+"""
+            zip_file.writestr('install.bat', windows_script)
+            
+        elif platform == 'linux':
+            # Linux shell script
+            linux_script = """#!/bin/bash
+echo "Installing WFH Monitoring Agent for Linux..."
+echo
+
+echo "Step 1: Installing Python dependencies..."
+pip3 install -r agent_requirements.txt
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install dependencies. Please ensure Python3 and pip3 are installed."
+    echo "Try: sudo apt update && sudo apt install python3 python3-pip python3-tk"
+    exit 1
+fi
+
+echo
+echo "Step 2: Creating service directory..."
+sudo mkdir -p /opt/wfh-agent
+sudo cp agent.py /opt/wfh-agent/
+sudo cp agent_requirements.txt /opt/wfh-agent/
+sudo chmod +x /opt/wfh-agent/agent.py
+
+echo
+echo "Step 3: Creating systemd service..."
+sudo tee /etc/systemd/system/wfh-agent.service > /dev/null <<EOF
+[Unit]
+Description=WFH Employee Monitoring Agent
+After=network.target
+
+[Service]
+Type=simple
+User=\\$USER
+WorkingDirectory=/opt/wfh-agent
+ExecStart=/usr/bin/python3 /opt/wfh-agent/agent.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo
+echo "Step 4: Enabling service..."
+sudo systemctl enable wfh-agent.service
+sudo systemctl start wfh-agent.service
+
+echo
+echo "Installation complete! Agent is now running as a service."
+echo "To check status: sudo systemctl status wfh-agent"
+"""
+            zip_file.writestr('install.sh', linux_script)
+            
+        elif platform == 'mac':
+            # macOS shell script
+            mac_script = """#!/bin/bash
+echo "Installing WFH Monitoring Agent for macOS..."
+echo
+
+echo "Step 1: Installing Python dependencies..."
+pip3 install -r agent_requirements.txt
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to install dependencies. Please ensure Python3 and pip3 are installed."
+    echo "Install from: https://www.python.org/downloads/"
+    exit 1
+fi
+
+echo
+echo "Step 2: Creating application directory..."
+mkdir -p ~/Library/Application\\ Support/WFH-Agent
+cp agent.py ~/Library/Application\\ Support/WFH-Agent/
+cp agent_requirements.txt ~/Library/Application\\ Support/WFH-Agent/
+
+echo
+echo "Step 3: Creating LaunchAgent for auto-start..."
+tee ~/Library/LaunchAgents/com.wfh.agent.plist > /dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wfh.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>$HOME/Library/Application Support/WFH-Agent/agent.py</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>$HOME/Library/Logs/wfh-agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>$HOME/Library/Logs/wfh-agent-error.log</string>
+</dict>
+</plist>
+EOF
+
+echo
+echo "Step 4: Loading LaunchAgent..."
+launchctl load ~/Library/LaunchAgents/com.wfh.agent.plist
+
+echo
+echo "Installation complete! Agent will start automatically on login."
+echo "Note: You may need to grant screen recording permissions in System Preferences > Security & Privacy"
+"""
+            zip_file.writestr('install.sh', mac_script)
     
     zip_buffer.seek(0)
     
