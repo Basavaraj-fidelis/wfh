@@ -1627,71 +1627,67 @@ def dashboard():
                 if (!date) return;
                 
                 try {
-                    const response = await makeAuthenticatedRequest(`/api/admin/reports/daily?date=${date}`);
+                    const response = await makeAuthenticatedRequest('/api/admin/reports/daily?date=' + date);
                     
                     if (response && response.ok) {
                         const data = await response.json();
                         
-                        let reportHtml = `
-                            <div class="export-buttons">
-                                <button class="btn btn-success" onclick="exportReport('daily', '${date}')">📊 Export CSV</button>
-                            </div>
+                        let reportHtml = '<div class="export-buttons">' +
+                                '<button class="btn btn-success" onclick="exportReport(\'daily\', \'' + date + '\')">📊 Export CSV</button>' +
+                            '</div>' +
+                            '<div class="summary-grid">' +
+                                '<div class="summary-card">' +
+                                    '<h4>Active Employees</h4>' +
+                                    '<div class="value">' + data.total_employees_active + '</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Total Hours</h4>' +
+                                    '<div class="value">' + data.total_hours_worked + 'h</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Avg Hours/Employee</h4>' +
+                                    '<div class="value">' + data.average_hours_per_employee + 'h</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="chart-container">' +
+                                '<h4>Employee Activity - ' + data.date + '</h4>' +
+                                '<table class="table">' +
+                                    '<thead>' +
+                                        '<tr>' +
+                                            '<th>Employee</th>' +
+                                            '<th>Hours Worked</th>' +
+                                            '<th>Progress</th>' +
+                                            '<th>First Activity</th>' +
+                                            '<th>Last Activity</th>' +
+                                            '<th>Heartbeats</th>' +
+                                            '<th>Logs</th>' +
+                                        '</tr>' +
+                                    '</thead>' +
+                                    '<tbody>';
+                                    
+                        data.employees.forEach(emp => {
+                            const percentage = Math.min((emp.hours_worked / 8) * 100, 100);
+                            const progressColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
                             
-                            <div class="summary-grid">
-                                <div class="summary-card">
-                                    <h4>Active Employees</h4>
-                                    <div class="value">${data.total_employees_active}</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Total Hours</h4>
-                                    <div class="value">${data.total_hours_worked}h</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Avg Hours/Employee</h4>
-                                    <div class="value">${data.average_hours_per_employee}h</div>
-                                </div>
-                            </div>
-                            
-                            <div class="chart-container">
-                                <h4>Employee Activity - ${data.date}</h4>
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Employee</th>
-                                            <th>Hours Worked</th>
-                                            <th>Progress</th>
-                                            <th>First Activity</th>
-                                            <th>Last Activity</th>
-                                            <th>Heartbeats</th>
-                                            <th>Logs</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${data.employees.map(emp => {
-                                            const percentage = Math.min((emp.hours_worked / 8) * 100, 100);
-                                            const progressColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
-                                            
-                                            return `
-                                                <tr>
-                                                    <td><strong>${emp.username}</strong></td>
-                                                    <td>${emp.hours_worked}h</td>
-                                                    <td>
-                                                        <div class="progress-bar" style="width: 100px;">
-                                                            <div class="progress-fill" style="width: ${percentage}%; background: ${progressColor};"></div>
-                                                            <div class="progress-text">${Math.round(percentage)}%</div>
-                                                        </div>
-                                                    </td>
-                                                    <td>${new Date(emp.first_activity).toLocaleTimeString()}</td>
-                                                    <td>${new Date(emp.last_activity).toLocaleTimeString()}</td>
-                                                    <td>${emp.heartbeats_count}</td>
-                                                    <td>${emp.logs_count}</td>
-                                                </tr>
-                                            `;
-                                        }).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        `;
+                            reportHtml += '<tr>' +
+                                '<td><strong>' + emp.username + '</strong></td>' +
+                                '<td>' + emp.hours_worked + 'h</td>' +
+                                '<td>' +
+                                    '<div class="progress-bar" style="width: 100px;">' +
+                                        '<div class="progress-fill" style="width: ' + percentage + '%; background: ' + progressColor + ';"></div>' +
+                                        '<div class="progress-text">' + Math.round(percentage) + '%</div>' +
+                                    '</div>' +
+                                '</td>' +
+                                '<td>' + new Date(emp.first_activity).toLocaleTimeString() + '</td>' +
+                                '<td>' + new Date(emp.last_activity).toLocaleTimeString() + '</td>' +
+                                '<td>' + emp.heartbeats_count + '</td>' +
+                                '<td>' + emp.logs_count + '</td>' +
+                            '</tr>';
+                        });
+                        
+                        reportHtml += '</tbody>' +
+                            '</table>' +
+                        '</div>';
                         
                         document.getElementById('dailyReportContent').innerHTML = reportHtml;
                     }
@@ -1705,51 +1701,53 @@ def dashboard():
                 if (!startDate) return;
                 
                 try {
-                    const response = await makeAuthenticatedRequest(`/api/admin/reports/weekly?start_date=${startDate}`);
+                    const response = await makeAuthenticatedRequest('/api/admin/reports/weekly?start_date=' + startDate);
                     
                     if (response && response.ok) {
                         const data = await response.json();
                         
-                        let reportHtml = `
-                            <div class="export-buttons">
-                                <button class="btn btn-success" onclick="exportReport('weekly', '${startDate}')">📊 Export CSV</button>
-                            </div>
+                        let reportHtml = '<div class="export-buttons">' +
+                                '<button class="btn btn-success" onclick="exportReport(\'weekly\', \'' + startDate + '\')">📊 Export CSV</button>' +
+                            '</div>' +
+                            '<div class="summary-grid">' +
+                                '<div class="summary-card">' +
+                                    '<h4>Week Range</h4>' +
+                                    '<div class="value" style="font-size: 14px;">' + data.week_start + ' to ' + data.week_end + '</div>' +
+                                '</div>' +
+                                '<div class="summary-card">' +
+                                    '<h4>Total Employees</h4>' +
+                                    '<div class="value">' + data.total_employees + '</div>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="chart-container">' +
+                                '<h4>Weekly Employee Activity</h4>' +
+                                '<table class="table">' +
+                                    '<thead>' +
+                                        '<tr>' +
+                                            '<th>Employee</th>' +
+                                            '<th>Total Hours</th>' +
+                                            '<th>Avg Daily Hours</th>' +
+                                            '<th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>' +
+                                        '</tr>' +
+                                    '</thead>' +
+                                    '<tbody>';
+                                    
+                        data.employees.forEach(emp => {
+                            reportHtml += '<tr>' +
+                                '<td><strong>' + emp.username + '</strong></td>' +
+                                '<td>' + emp.total_hours + 'h</td>' +
+                                '<td>' + emp.average_daily_hours + 'h</td>';
                             
-                            <div class="summary-grid">
-                                <div class="summary-card">
-                                    <h4>Week Range</h4>
-                                    <div class="value" style="font-size: 14px;">${data.week_start} to ${data.week_end}</div>
-                                </div>
-                                <div class="summary-card">
-                                    <h4>Total Employees</h4>
-                                    <div class="value">${data.total_employees}</div>
-                                </div>
-                            </div>
+                            emp.daily_breakdown.forEach(day => {
+                                reportHtml += '<td>' + day.hours_worked + 'h</td>';
+                            });
                             
-                            <div class="chart-container">
-                                <h4>Weekly Employee Activity</h4>
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Employee</th>
-                                            <th>Total Hours</th>
-                                            <th>Avg Daily Hours</th>
-                                            <th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${data.employees.map(emp => `
-                                            <tr>
-                                                <td><strong>${emp.username}</strong></td>
-                                                <td>${emp.total_hours}h</td>
-                                                <td>${emp.average_daily_hours}h</td>
-                                                ${emp.daily_breakdown.map(day => `<td>${day.hours_worked}h</td>`).join('')}
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        `;
+                            reportHtml += '</tr>';
+                        });
+                        
+                        reportHtml += '</tbody>' +
+                            '</table>' +
+                        '</div>';
                         
                         document.getElementById('weeklyReportContent').innerHTML = reportHtml;
                     }
@@ -1781,15 +1779,14 @@ def dashboard():
                 }
                 
                 try {
-                    const response = await makeAuthenticatedRequest(`/api/admin/reports/range?start_date=${startDate}&end_date=${endDate}`);
+                    const response = await makeAuthenticatedRequest('/api/admin/reports/range?start_date=' + startDate + '&end_date=' + endDate);
                     
                     if (response && response.ok) {
                         const data = await response.json();
                         
-                        let reportHtml = `
-                            <div class="export-buttons">
-                                <button class="btn btn-success" onclick="exportReport('custom', '${startDate}_${endDate}')">📊 Export CSV</button>
-                            </div>
+                        let reportHtml = '<div class="export-buttons">' +
+                                '<button class="btn btn-success" onclick="exportReport(\'custom\', \'' + startDate + '_' + endDate + '\')">📊 Export CSV</button>' +
+                            '</div>'
                             
                             <div class="summary-grid">
                                 <div class="summary-card">
