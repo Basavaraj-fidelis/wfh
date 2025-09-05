@@ -1525,44 +1525,43 @@ def dashboard():
             }
             
             function displayEmployees(employees) {
-                const tableHtml = `
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Employee</th>
-                                <th>Hostname</th>
-                                <th>Status</th>
-                                <th>Public IP</th>
-                                <th>Location</th>
-                                <th>Last Seen</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${employees.map(emp => `
-                                <tr>
-                                    <td><strong>${emp.username}</strong></td>
-                                    <td>${emp.hostname}</td>
-                                    <td class="${emp.status === 'online' ? 'status-online' : 'status-offline'}">
-                                        ${emp.status === 'online' ? '🟢 Online' : '🔴 Offline'}
-                                    </td>
-                                    <td>${emp.public_ip}</td>
-                                    <td>
-                                        <div style="font-size: 12px;">
-                                            <div>🏙️ ${emp.city}, ${emp.state}</div>
-                                            <div>🌍 ${emp.country}</div>
-                                        </div>
-                                    </td>
-                                    <td>${new Date(emp.last_seen).toLocaleString()}</td>
-                                    <td>
-                                        <button class="btn btn-primary-sm" onclick="viewEmployeeLogs('${emp.username}')">View Logs</button>
-                                        <button class="btn btn-success" onclick="viewWorkingHours('${emp.username}')">Working Hours</button>
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                `;
+                let tableHtml = '<table class="table">' +
+                    '<thead>' +
+                        '<tr>' +
+                            '<th>Employee</th>' +
+                            '<th>Hostname</th>' +
+                            '<th>Status</th>' +
+                            '<th>Public IP</th>' +
+                            '<th>Location</th>' +
+                            '<th>Last Seen</th>' +
+                            '<th>Actions</th>' +
+                        '</tr>' +
+                    '</thead>' +
+                    '<tbody>';
+                    
+                employees.forEach(emp => {
+                    tableHtml += '<tr>' +
+                        '<td><strong>' + emp.username + '</strong></td>' +
+                        '<td>' + emp.hostname + '</td>' +
+                        '<td class="' + (emp.status === 'online' ? 'status-online' : 'status-offline') + '">' +
+                            (emp.status === 'online' ? '🟢 Online' : '🔴 Offline') +
+                        '</td>' +
+                        '<td>' + emp.public_ip + '</td>' +
+                        '<td>' +
+                            '<div style="font-size: 12px;">' +
+                                '<div>🏙️ ' + emp.city + ', ' + emp.state + '</div>' +
+                                '<div>🌍 ' + emp.country + '</div>' +
+                            '</div>' +
+                        '</td>' +
+                        '<td>' + new Date(emp.last_seen).toLocaleString() + '</td>' +
+                        '<td>' +
+                            '<button class="btn btn-primary-sm" onclick="viewEmployeeLogs(\'' + emp.username + '\')"'>View Logs</button>' +
+                            '<button class="btn btn-success" onclick="viewWorkingHours(\'' + emp.username + '\')"'>Working Hours</button>' +
+                        '</td>' +
+                    '</tr>';
+                });
+                
+                tableHtml += '</tbody></table>';
                 
                 document.getElementById('employeesList').innerHTML = employees.length ? tableHtml : '<p>No employees found</p>';
             }
