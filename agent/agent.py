@@ -56,31 +56,74 @@ class MonitoringAgent:
             return "unknown"
     
     def get_location(self, public_ip):
-        """Get approximate location from IP"""
+        """Get approximate location from IP using ipinfo.io"""
         try:
-            response = requests.get(f'https://httpbin.org/json', timeout=10)
-            # In a real implementation, you'd use a GeoIP service like ipapi.co
-            # For demo purposes, we'll return basic info
-            return json.dumps({
-                "ip": public_ip,
-                "country": "Unknown",
-                "region": "Unknown", 
-                "city": "Unknown",
-                "provider": "Unknown"
-            })
-        except:
-            return json.dumps({"ip": public_ip, "error": "Could not determine location"})
+            # Use ipinfo.io for accurate geolocation
+            response = requests.get(f'https://ipinfo.io/{public_ip}/json', timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                return json.dumps({
+                    "ip": data.get('ip', public_ip),
+                    "country": data.get('country', 'Unknown'),
+                    "region": data.get('region', 'Unknown'), 
+                    "city": data.get('city', 'Unknown'),
+                    "provider": data.get('org', 'Unknown'),
+                    "timezone": data.get('timezone', 'Unknown'),
+                    "location": data.get('loc', 'Unknown')
+                })
+            else:
+                # Fallback to basic info
+                return json.dumps({
+                    "ip": public_ip,
+                    "country": "Unknown",
+                    "region": "Unknown", 
+                    "city": "Unknown",
+                    "provider": "Unknown",
+                    "error": f"ipinfo.io returned {response.status_code}"
+                })
+        except Exception as e:
+            return json.dumps({"ip": public_ip, "error": f"Could not determine location: {str(e)}"})
     
     def take_screenshot(self):
-        """Take screenshot and save temporarily"""
+        """Take screenshot and save temporarily - Cross-platform compatible"""
         try:
+            # Cross-platform screenshot handling
+            if platform.system() == "Darwin":  # macOS
+                # On macOS, may need additional permissions for screen recording
+                import subprocess
+                try:
+                    # Try using screencapture command first (native macOS)
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    filename = f"temp_screenshot_{self.username}_{timestamp}.png"
+                    subprocess.run(['screencapture', '-x', filename], check=True, timeout=30)
+                    return filename
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    # Fall back to PIL
+                    pass
+            
+            # Standard cross-platform PIL approach
             screenshot = ImageGrab.grab()
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"temp_screenshot_{self.username}_{timestamp}.png"
             screenshot.save(filename)
-            return filename
+            
+            # Verify file was created
+            if os.path.exists(filename):
+                return filename
+            else:
+                print(f"Screenshot file not created: {filename}")
+                return None
+                
+        except ImportError:
+            print("PIL/Pillow not available for screenshots")
+            return None
         except Exception as e:
             print(f"Failed to take screenshot: {e}")
+            # For Linux systems that might need different handling
+            if platform.system() == "Linux":
+                print("Hint: On Linux, you may need: sudo apt-get install python3-tk python3-dev")
+            elif platform.system() == "Darwin":
+                print("Hint: On macOS, grant screen recording permissions in System Preferences")
             return None
     
     def send_heartbeat(self):
