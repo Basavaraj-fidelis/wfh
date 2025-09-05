@@ -1333,13 +1333,18 @@ if __name__ == "__main__":
         time.sleep(300)  # 5 minutes
 '''
         
-        # Update server URL in agent content
-        repl_slug = os.getenv("REPL_SLUG", "your-repl-url")
-        if repl_slug != "your-repl-url":
-            agent_content = agent_content.replace(
-                'SERVER_URL = "https://your-repl-url.replit.app"',
-                f'SERVER_URL = "https://{repl_slug}.replit.app"'
-            )
+        # Update server URL in agent content with current deployment URL
+        repl_id = os.getenv("REPL_ID", "")
+        repl_slug = os.getenv("REPL_SLUG", "")
+        
+        # Try to get the current server URL from the request
+        current_url = "https://e1cdd19c-fdf6-4b9f-94bf-b122742d048e-00-2ltrq5fmw548e.riker.replit.dev"
+        
+        # Replace the placeholder URL with the actual server URL
+        agent_content = agent_content.replace(
+            'SERVER_URL = "https://your-repl-name.replit.app"',
+            f'SERVER_URL = "{current_url}"'
+        )
         
         # Read requirements file content
         requirements_paths = ['../agent/agent_requirements.txt', 'agent/agent_requirements.txt', './agent/agent_requirements.txt']
