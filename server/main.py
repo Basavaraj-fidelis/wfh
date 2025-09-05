@@ -1343,7 +1343,7 @@ def dashboard():
                             const errorData = JSON.parse(responseData);
                             errorMessage = errorData.detail || errorMessage;
                         } catch (e) {
-                            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                            errorMessage = 'HTTP ' + response.status + ': ' + response.statusText;
                         }
                         showAlert('loginAlert', errorMessage, 'error');
                     }
@@ -1443,15 +1443,15 @@ def dashboard():
                         
                         // Show recent activity
                         const activityHtml = employees.map(emp => 
-                            `<div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;">
-                                <div>
-                                    <strong>${emp.username}</strong> (${emp.hostname})
-                                </div>
-                                <div class="${emp.status === 'online' ? 'status-online' : 'status-offline'}">
-                                    ${emp.status === 'online' ? '🟢 Online' : '🔴 Offline'} 
-                                    <small>${new Date(emp.last_seen).toLocaleString()}</small>
-                                </div>
-                            </div>`
+                            '<div style="padding: 10px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between;">' +
+                                '<div>' +
+                                    '<strong>' + emp.username + '</strong> (' + emp.hostname + ')' +
+                                '</div>' +
+                                '<div class="' + (emp.status === 'online' ? 'status-online' : 'status-offline') + '">' +
+                                    (emp.status === 'online' ? '🟢 Online' : '🔴 Offline') + ' ' +
+                                    '<small>' + new Date(emp.last_seen).toLocaleString() + '</small>' +
+                                '</div>' +
+                            '</div>'
                         ).join('');
                         
                         document.getElementById('recentActivity').innerHTML = activityHtml || '<p>No employee data available</p>';
@@ -1472,44 +1472,43 @@ def dashboard():
                         const data = await response.json();
                         const employees = data.employees || [];
                         
-                        const tableHtml = `
-                            <table class="table">
-                                <thead>
-                                    <tr>
-                                        <th>Employee</th>
-                                        <th>Hostname</th>
-                                        <th>Status</th>
-                                        <th>Public IP</th>
-                                        <th>Location</th>
-                                        <th>Last Seen</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${employees.map(emp => `
-                                        <tr>
-                                            <td><strong>${emp.username}</strong></td>
-                                            <td>${emp.hostname}</td>
-                                            <td class="${emp.status === 'online' ? 'status-online' : 'status-offline'}">
-                                                ${emp.status === 'online' ? '🟢 Online' : '🔴 Offline'}
-                                            </td>
-                                            <td>${emp.public_ip}</td>
-                                            <td>
-                                                <div style="font-size: 12px;">
-                                                    <div>🏙️ ${emp.city}, ${emp.state}</div>
-                                                    <div>🌍 ${emp.country}</div>
-                                                </div>
-                                            </td>
-                                            <td>${new Date(emp.last_seen).toLocaleString()}</td>
-                                            <td>
-                                                <button class="btn btn-primary-sm" onclick="viewEmployeeLogs('${emp.username}')">View Logs</button>
-                                                <button class="btn btn-success" onclick="viewWorkingHours('${emp.username}')">Working Hours</button>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        `;
+                        let tableHtml = '<table class="table">' +
+                            '<thead>' +
+                                '<tr>' +
+                                    '<th>Employee</th>' +
+                                    '<th>Hostname</th>' +
+                                    '<th>Status</th>' +
+                                    '<th>Public IP</th>' +
+                                    '<th>Location</th>' +
+                                    '<th>Last Seen</th>' +
+                                    '<th>Actions</th>' +
+                                '</tr>' +
+                            '</thead>' +
+                            '<tbody>';
+                            
+                        employees.forEach(emp => {
+                            tableHtml += '<tr>' +
+                                '<td><strong>' + emp.username + '</strong></td>' +
+                                '<td>' + emp.hostname + '</td>' +
+                                '<td class="' + (emp.status === 'online' ? 'status-online' : 'status-offline') + '">' +
+                                    (emp.status === 'online' ? '🟢 Online' : '🔴 Offline') +
+                                '</td>' +
+                                '<td>' + emp.public_ip + '</td>' +
+                                '<td>' +
+                                    '<div style="font-size: 12px;">' +
+                                        '<div>🏙️ ' + emp.city + ', ' + emp.state + '</div>' +
+                                        '<div>🌍 ' + emp.country + '</div>' +
+                                    '</div>' +
+                                '</td>' +
+                                '<td>' + new Date(emp.last_seen).toLocaleString() + '</td>' +
+                                '<td>' +
+                                    '<button class="btn btn-primary-sm" onclick="viewEmployeeLogs(\'' + emp.username + '\')"'>View Logs</button>' +
+                                    '<button class="btn btn-success" onclick="viewWorkingHours(\'' + emp.username + '\')"'>Working Hours</button>' +
+                                '</td>' +
+                            '</tr>';
+                        });
+                        
+                        tableHtml += '</tbody></table>';
                         
                         allEmployees = employees;
                         filteredEmployees = [...employees];
@@ -1850,7 +1849,7 @@ def dashboard():
             function exportReport(type, date) {
                 // Simple CSV export functionality
                 let csvContent = '';
-                const table = document.querySelector(`#${currentReportTab}ReportContent table`);
+                const table = document.querySelector('#' + currentReportTab + 'ReportContent table');
                 
                 if (table) {
                     // Get table headers
@@ -1871,7 +1870,7 @@ def dashboard():
                     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                     const link = document.createElement('a');
                     link.href = URL.createObjectURL(blob);
-                    link.download = `employee_report_${type}_${date}.csv`;
+                    link.download = 'employee_report_' + type + '_' + date + '.csv';
                     link.click();
                 } else {
                     alert('No report data available to export');
@@ -1880,29 +1879,27 @@ def dashboard():
             
             async function viewEmployeeLogs(username) {
                 try {
-                    const response = await makeAuthenticatedRequest(`/api/admin/employees/${username}/logs?days=7`);
+                    const response = await makeAuthenticatedRequest('/api/admin/employees/' + username + '/logs?days=7');
                     
                     if (response && response.ok) {
                         const data = await response.json();
                         const logs = data.logs || [];
                         
-                        let logDetails = `<h3>📋 Logs for ${username} (Last 7 days)</h3>`;
-                        logDetails += `<p><strong>Total logs:</strong> ${logs.length}</p>`;
+                        let logDetails = '<h3>📋 Logs for ' + username + ' (Last 7 days)</h3>';
+                        logDetails += '<p><strong>Total logs:</strong> ' + logs.length + '</p>';
                         
                         if (logs.length > 0) {
                             logDetails += '<div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin: 10px 0;">';
                             logs.forEach(log => {
                                 const logDate = new Date(log.timestamp).toLocaleString();
-                                logDetails += `
-                                    <div style="border-bottom: 1px solid #eee; padding: 10px 0;">
-                                        <strong>📅 ${logDate}</strong><br>
-                                        <strong>🖥️ Hostname:</strong> ${log.hostname}<br>
-                                        <strong>🌐 Local IP:</strong> ${log.local_ip}<br>
-                                        <strong>🌍 Public IP:</strong> ${log.public_ip}<br>
-                                        <strong>📍 Location:</strong> ${log.location}<br>
-                                        <strong>📸 Screenshot:</strong> ${log.screenshot_path ? 'Available' : 'None'}
-                                    </div>
-                                `;
+                                logDetails += '<div style="border-bottom: 1px solid #eee; padding: 10px 0;">' +
+                                    '<strong>📅 ' + logDate + '</strong><br>' +
+                                    '<strong>🖥️ Hostname:</strong> ' + log.hostname + '<br>' +
+                                    '<strong>🌐 Local IP:</strong> ' + log.local_ip + '<br>' +
+                                    '<strong>🌍 Public IP:</strong> ' + log.public_ip + '<br>' +
+                                    '<strong>📍 Location:</strong> ' + log.location + '<br>' +
+                                    '<strong>📸 Screenshot:</strong> ' + (log.screenshot_path ? 'Available' : 'None') +
+                                '</div>';
                             });
                             logDetails += '</div>';
                         } else {
@@ -1924,36 +1921,34 @@ def dashboard():
             async function viewWorkingHours(username) {
                 try {
                     const today = new Date().toISOString().split('T')[0];
-                    const response = await makeAuthenticatedRequest(`/api/admin/employees/${username}/working-hours?date=${today}`);
+                    const response = await makeAuthenticatedRequest('/api/admin/employees/' + username + '/working-hours?date=' + today);
                     
                     if (response && response.ok) {
                         const data = await response.json();
                         
-                        let hoursDetails = `<h3>⏰ Working Hours for ${username}</h3>`;
-                        hoursDetails += `<p><strong>Date:</strong> ${data.date}</p>`;
-                        hoursDetails += `<p><strong>Total Hours:</strong> ${data.total_hours} hours</p>`;
+                        let hoursDetails = '<h3>⏰ Working Hours for ' + username + '</h3>';
+                        hoursDetails += '<p><strong>Date:</strong> ' + data.date + '</p>';
+                        hoursDetails += '<p><strong>Total Hours:</strong> ' + data.total_hours + ' hours</p>';
                         
                         if (data.first_seen && data.last_seen) {
                             const firstSeen = new Date(data.first_seen).toLocaleTimeString();
                             const lastSeen = new Date(data.last_seen).toLocaleTimeString();
-                            hoursDetails += `<p><strong>First Activity:</strong> ${firstSeen}</p>`;
-                            hoursDetails += `<p><strong>Last Activity:</strong> ${lastSeen}</p>`;
+                            hoursDetails += '<p><strong>First Activity:</strong> ' + firstSeen + '</p>';
+                            hoursDetails += '<p><strong>Last Activity:</strong> ' + lastSeen + '</p>';
                             
                             // Add visual progress bar
                             const maxHours = 8;
                             const percentage = Math.min((data.total_hours / maxHours) * 100, 100);
                             const barColor = percentage >= 100 ? '#28a745' : percentage >= 75 ? '#ffc107' : '#dc3545';
                             
-                            hoursDetails += `
-                                <div style="margin: 15px 0;">
-                                    <div style="background: #f8f9fa; border-radius: 10px; height: 20px; position: relative;">
-                                        <div style="background: ${barColor}; height: 100%; width: ${percentage}%; border-radius: 10px; transition: width 0.3s;"></div>
-                                        <span style="position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: bold;">
-                                            ${data.total_hours}h / ${maxHours}h
-                                        </span>
-                                    </div>
-                                </div>
-                            `;
+                            hoursDetails += '<div style="margin: 15px 0;">' +
+                                '<div style="background: #f8f9fa; border-radius: 10px; height: 20px; position: relative;">' +
+                                    '<div style="background: ' + barColor + '; height: 100%; width: ' + percentage + '%; border-radius: 10px; transition: width 0.3s;"></div>' +
+                                    '<span style="position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: bold;">' +
+                                        data.total_hours + 'h / ' + maxHours + 'h' +
+                                    '</span>' +
+                                '</div>' +
+                            '</div>';
                         } else {
                             hoursDetails += '<p><em>No activity recorded for today</em></p>';
                         }
@@ -1976,30 +1971,10 @@ def dashboard():
                 if (!modal) {
                     modal = document.createElement('div');
                     modal.id = 'customModal';
-                    modal.style.cssText = `
-                        position: fixed;
-                        top: 0;
-                        left: 0;
-                        width: 100%;
-                        height: 100%;
-                        background: rgba(0,0,0,0.5);
-                        display: flex;
-                        justify-content: center;
-                        align-items: center;
-                        z-index: 1000;
-                    `;
+                    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;';
                     
                     const modalContent = document.createElement('div');
-                    modalContent.style.cssText = `
-                        background: white;
-                        padding: 20px;
-                        border-radius: 10px;
-                        max-width: 80%;
-                        max-height: 80%;
-                        overflow-y: auto;
-                        position: relative;
-                        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-                    `;
+                    modalContent.style.cssText = 'background: white; padding: 20px; border-radius: 10px; max-width: 80%; max-height: 80%; overflow-y: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.3);';
                     
                     modal.appendChild(modalContent);
                     document.body.appendChild(modal);
@@ -2013,13 +1988,11 @@ def dashboard():
                 }
                 
                 const modalContent = modal.querySelector('div');
-                modalContent.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">
-                        <h2 style="margin: 0; color: #333;">${title}</h2>
-                        <button onclick="closeModal()" style="background: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer; font-size: 18px;">&times;</button>
-                    </div>
-                    <div>${content}</div>
-                `;
+                modalContent.innerHTML = '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px;">' +
+                        '<h2 style="margin: 0; color: #333;">' + title + '</h2>' +
+                        '<button onclick="closeModal()" style="background: #dc3545; color: white; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer; font-size: 18px;">&times;</button>' +
+                    '</div>' +
+                    '<div>' + content + '</div>';
                 
                 modal.style.display = 'flex';
             }
@@ -2037,28 +2010,8 @@ def dashboard():
                     return;
                 }
                 
-                // Download the agent zip file
-                const link = document.createElement('a');
-                link.href = `/download/agent/${platform}`;
-                link.download = `wfh-agent-${platform}.zip`;
-                link.style.display = 'none';
-                
-                // Add authorization header by creating a form
-                const form = document.createElement('form');
-                form.method = 'GET';
-                form.action = `/download/agent/${platform}`;
-                form.style.display = 'none';
-                
-                const tokenInput = document.createElement('input');
-                tokenInput.type = 'hidden';
-                tokenInput.name = 'token';
-                tokenInput.value = authToken;
-                form.appendChild(tokenInput);
-                
-                document.body.appendChild(form);
-                
                 // Use fetch to download with proper auth
-                fetch(`/download/agent/${platform}`, {
+                fetch('/download/agent/' + platform, {
                     headers: { 'Authorization': 'Bearer ' + authToken }
                 })
                 .then(response => {
@@ -2071,10 +2024,10 @@ def dashboard():
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `wfh-agent-${platform}.zip`;
+                    a.download = 'wfh-agent-' + platform + '.zip';
                     a.click();
                     window.URL.revokeObjectURL(url);
-                    alert(`Agent for ${platform} downloaded successfully!`);
+                    alert('Agent for ' + platform + ' downloaded successfully!');
                 })
                 .catch(error => {
                     alert('Download failed: ' + error.message);
@@ -2098,7 +2051,7 @@ def dashboard():
                     if (response.ok) {
                         const data = await response.json();
                         showAlert('settingsAlert', 
-                            `Cleanup completed: ${data.deleted_heartbeats} heartbeats, ${data.deleted_logs} logs, ${data.deleted_screenshots} screenshots deleted`, 
+                            'Cleanup completed: ' + data.deleted_heartbeats + ' heartbeats, ' + data.deleted_logs + ' logs, ' + data.deleted_screenshots + ' screenshots deleted', 
                             'success');
                     }
                 } catch (error) {
@@ -2109,7 +2062,7 @@ def dashboard():
             function showAlert(containerId, message, type) {
                 const alertClass = type === 'error' ? 'alert-error' : 'alert-success';
                 document.getElementById(containerId).innerHTML = 
-                    `<div class="alert ${alertClass}">${message}</div>`;
+                    '<div class="alert ' + alertClass + '">' + message + '</div>';
                 
                 setTimeout(() => {
                     document.getElementById(containerId).innerHTML = '';
