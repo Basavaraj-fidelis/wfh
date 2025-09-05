@@ -702,27 +702,69 @@ def dashboard():
             
             async function login(event) {
                 event.preventDefault();
-                const username = document.getElementById('username').value;
+                
+                // Clear any previous alerts
+                document.getElementById('loginAlert').innerHTML = '';
+                
+                const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
                 
+                // Basic validation
+                if (!username || !password) {
+                    showAlert('loginAlert', 'Please enter both username and password', 'error');
+                    return;
+                }
+                
+                // Show loading state
+                const loginButton = event.target.querySelector('button[type="submit"]');
+                const originalText = loginButton.textContent;
+                loginButton.textContent = 'Logging in...';
+                loginButton.disabled = true;
+                
                 try {
+                    console.log('Attempting login with username:', username);
+                    
                     const response = await fetch('/api/admin/login', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json'
+                        },
                         body: JSON.stringify({ username, password })
                     });
                     
+                    console.log('Login response status:', response.status);
+                    const responseData = await response.text();
+                    console.log('Login response data:', responseData);
+                    
                     if (response.ok) {
-                        const data = await response.json();
-                        authToken = data.access_token;
-                        localStorage.setItem('adminToken', authToken);
-                        showDashboard();
-                        loadDashboardData();
+                        const data = JSON.parse(responseData);
+                        if (data.access_token) {
+                            authToken = data.access_token;
+                            localStorage.setItem('adminToken', authToken);
+                            console.log('Login successful, token stored');
+                            showDashboard();
+                            loadDashboardData();
+                        } else {
+                            showAlert('loginAlert', 'Login response missing token', 'error');
+                        }
                     } else {
-                        showAlert('loginAlert', 'Invalid username or password', 'error');
+                        let errorMessage = 'Login failed';
+                        try {
+                            const errorData = JSON.parse(responseData);
+                            errorMessage = errorData.detail || errorMessage;
+                        } catch (e) {
+                            errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                        }
+                        showAlert('loginAlert', errorMessage, 'error');
                     }
                 } catch (error) {
+                    console.error('Login error:', error);
                     showAlert('loginAlert', 'Connection error: ' + error.message, 'error');
+                } finally {
+                    // Restore button state
+                    loginButton.textContent = originalText;
+                    loginButton.disabled = false;
                 }
             }
             
