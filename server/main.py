@@ -1279,22 +1279,21 @@ def download_agent(platform: str, admin=Depends(verify_admin_token)):
     zip_buffer = io.BytesIO()
     
     try:
-        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-            # Try different paths for agent files
-            agent_paths = ['../agent/agent.py', 'agent/agent.py', './agent/agent.py']
-            agent_content = None
-            
-            for path in agent_paths:
-                try:
-                    with open(path, 'r') as f:
-                        agent_content = f.read()
-                    break
-                except FileNotFoundError:
-                    continue
-            
-            if not agent_content:
-                # Create a basic agent if file not found
-                agent_content = '''#!/usr/bin/env python3
+        # Read agent file content
+        agent_paths = ['../agent/agent.py', 'agent/agent.py', './agent/agent.py']
+        agent_content = None
+        
+        for path in agent_paths:
+            try:
+                with open(path, 'r') as f:
+                    agent_content = f.read()
+                break
+            except FileNotFoundError:
+                continue
+        
+        if not agent_content:
+            # Create a basic agent if file not found
+            agent_content = '''#!/usr/bin/env python3
 """
 WFH Employee Monitoring Agent
 Basic version - Update SERVER_URL and AUTH_TOKEN before use
@@ -1333,18 +1332,16 @@ if __name__ == "__main__":
         send_heartbeat()
         time.sleep(300)  # 5 minutes
 '''
-            
-            # Update server URL in agent content
-            repl_slug = os.getenv("REPL_SLUG", "your-repl-url")
-            if repl_slug != "your-repl-url":
-                agent_content = agent_content.replace(
-                    'SERVER_URL = "https://your-repl-url.replit.app"',
-                    f'SERVER_URL = "https://{repl_slug}.replit.app"'
-                )
-            
-            zip_file.writestr('agent.py', agent_content)
         
-        # Add requirements
+        # Update server URL in agent content
+        repl_slug = os.getenv("REPL_SLUG", "your-repl-url")
+        if repl_slug != "your-repl-url":
+            agent_content = agent_content.replace(
+                'SERVER_URL = "https://your-repl-url.replit.app"',
+                f'SERVER_URL = "https://{repl_slug}.replit.app"'
+            )
+        
+        # Read requirements file content
         requirements_paths = ['../agent/agent_requirements.txt', 'agent/agent_requirements.txt', './agent/agent_requirements.txt']
         requirements_content = None
         
@@ -1364,10 +1361,13 @@ Pillow>=10.0.0
 psutil>=5.9.0
 """
         
-        zip_file.writestr('agent_requirements.txt', requirements_content)
+        # Create ZIP file with all content
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('agent.py', agent_content)
+            zip_file.writestr('agent_requirements.txt', requirements_content)
         
         # Add platform-specific instructions
-        instructions = f"""
+            instructions = f"""
 # WFH Monitoring Agent Setup - {platform.title()}
 
 ## Installation Instructions
@@ -1376,7 +1376,7 @@ psutil>=5.9.0
 2. Extract these files to a directory (e.g., C:\\wfh-agent\\ on Windows)
 3. Open command prompt/terminal in that directory
 4. Run: pip install -r agent_requirements.txt
-5. Edit agent.py to set your server URL (line 166)
+5. Edit agent.py to set your server URL if needed
 6. Run: python agent.py
 7. The agent will start sending heartbeats every 5 minutes
 
@@ -1386,83 +1386,20 @@ psutil>=5.9.0
 
 ## Platform-specific Notes:
 """
-        
-        if platform == 'windows':
-            instructions += """
+            
+            if platform == 'windows':
+                instructions += """
 ### Windows Setup:
 - Run as Administrator for best compatibility
 - Add to Windows startup: Add shortcut to agent.py in:
   %APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\
 - For service installation, use nssm or similar tools
 """
-        elif platform == 'mac':
-            instructions += """
-### macOS Setup:  
-- May need to allow Python in Privacy & Security settings
-- For startup: Create LaunchAgent plist file in ~/Library/LaunchAgents/
-- Grant screen recording permissions in System Preferences
-"""
-        elif platform == 'linux':
-            instructions += """
-### Linux Setup:
-- Install python3-pip if not available: sudo apt install python3-pip
-- For startup: Create systemd service or add to ~/.profile
-- May need to install python3-tk for screenshot functionality
-"""
-        
-        zip_file.writestr('README.txt', instructions)
-        
-        # Add platform-specific installation scripts
-        if platform == 'windows':
-            # Windows MSI installer configuration
-            wix_config = """<?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="WFH Monitoring Agent" Language="1033" Version="1.0.0" 
-           Manufacturer="Your Company" UpgradeCode="12345678-1234-1234-1234-123456789012">
-    <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
-    
-    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
-    <MediaTemplate EmbedCab="yes" />
-    
-    <Feature Id="ProductFeature" Title="WFH Agent" Level="1">
-      <ComponentGroupRef Id="ProductComponents" />
-    </Feature>
-    
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder">
-        <Directory Id="INSTALLFOLDER" Name="WFH Agent" />
-      </Directory>
-    </Directory>
-    
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
-      <Component Id="AgentFiles" Guid="87654321-4321-4321-4321-210987654321">
-        <File Id="AgentPy" Source="agent.py" KeyPath="yes" />
-        <File Id="Requirements" Source="agent_requirements.txt" />
-        <File Id="InstallScript" Source="install_service.bat" />
-      </Component>
-    </ComponentGroup>
-    
-    <CustomAction Id="InstallService" BinaryKey="WixCA" DllEntry="CAQuietExec" 
-                  Execute="deferred" Return="check" Impersonate="no" />
-  </Product>
-</Wix>"""
-            zip_file.writestr('agent.wxs', wix_config)
-            
-            # Windows service installation script
-            windows_script = """@echo off
+                
+                # Windows service installation script
+                windows_script = """@echo off
 echo Installing WFH Monitoring Agent for Windows...
 echo.
-
-REM Check for admin privileges
-net session >nul 2>&1
-if %errorLevel% == 0 (
-    echo Administrative privileges confirmed.
-) else (
-    echo This script requires administrative privileges.
-    echo Please run as Administrator.
-    pause
-    exit /b 1
-)
 
 echo Step 1: Installing Python dependencies...
 pip install -r agent_requirements.txt
@@ -1473,221 +1410,60 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo Step 2: Creating service directory...
-mkdir "C:\\Program Files\\WFH-Agent" 2>nul
-copy agent.py "C:\\Program Files\\WFH-Agent\\"
-copy agent_requirements.txt "C:\\Program Files\\WFH-Agent\\"
-
-echo.
-echo Step 3: Installing as Windows Service...
-sc create "WFH-Agent" binPath= "python \"C:\\Program Files\\WFH-Agent\\agent.py\"" start= auto
-sc description "WFH-Agent" "WFH Employee Monitoring Agent"
-sc start "WFH-Agent"
-
-echo.
-echo Installation complete! Service installed and started.
-echo To uninstall: sc delete "WFH-Agent"
+echo Step 2: Agent ready to run...
+echo Run: python agent.py
+echo To run in background: start /b python agent.py
 pause
 """
-            zip_file.writestr('install_service.bat', windows_script)
-            
-            # Silent install script for MSI
-            silent_install = """@echo off
-REM Silent installation command for MSI
-REM Usage: msiexec /i wfh-agent.msi /qn INSTALLFOLDER="C:\\Program Files\\WFH Agent"
-echo Use the following command for silent installation:
-echo msiexec /i wfh-agent.msi /qn
-pause
+                zip_file.writestr('install.bat', windows_script)
+                
+            elif platform == 'mac':
+                instructions += """
+### macOS Setup:  
+- May need to allow Python in Privacy & Security settings
+- For startup: Create LaunchAgent plist file in ~/Library/LaunchAgents/
+- Grant screen recording permissions in System Preferences
 """
-            zip_file.writestr('silent_install.bat', silent_install)
-            
-        elif platform == 'linux':
-            # Debian package control file
-            debian_control = """Package: wfh-agent
-Version: 1.0.0
-Section: utils
-Priority: optional
-Architecture: all
-Depends: python3 (>= 3.7), python3-pip, python3-tk
-Maintainer: Your Company <admin@company.com>
-Description: WFH Employee Monitoring Agent
- Monitors employee activity and sends heartbeats to central server.
- Includes automatic screenshot capture and location tracking.
+                
+                # macOS installation script
+                mac_script = """#!/bin/bash
+echo "Installing WFH Monitoring Agent for macOS..."
+echo
+
+echo "Step 1: Installing Python dependencies..."
+pip3 install -r agent_requirements.txt
+
+echo
+echo "Step 2: Agent ready to run..."
+echo "Run: python3 agent.py"
+echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 """
-            zip_file.writestr('DEBIAN/control', debian_control)
-            
-            # Debian package postinst script
-            postinst_script = """#!/bin/bash
-set -e
-
-echo "Configuring WFH Monitoring Agent..."
-
-# Install Python dependencies
-pip3 install -r /opt/wfh-agent/agent_requirements.txt
-
-# Create systemd service
-systemctl enable wfh-agent.service
-systemctl start wfh-agent.service
-
-echo "WFH Agent installed and started successfully."
+                zip_file.writestr('install.sh', mac_script)
+                
+            elif platform == 'linux':
+                instructions += """
+### Linux Setup:
+- Install python3-pip if not available: sudo apt install python3-pip
+- For startup: Create systemd service or add to ~/.profile
+- May need to install python3-tk for screenshot functionality
 """
-            zip_file.writestr('DEBIAN/postinst', postinst_script)
-            
-            # Debian package prerm script
-            prerm_script = """#!/bin/bash
-set -e
-
-echo "Stopping WFH Agent service..."
-systemctl stop wfh-agent.service || true
-systemctl disable wfh-agent.service || true
-"""
-            zip_file.writestr('DEBIAN/prerm', prerm_script)
-            
-            # Linux installation script
-            linux_script = """#!/bin/bash
+                
+                # Linux installation script
+                linux_script = """#!/bin/bash
 echo "Installing WFH Monitoring Agent for Linux..."
 echo
 
-echo "Step 1: Building .deb package..."
-mkdir -p wfh-agent-deb/opt/wfh-agent
-mkdir -p wfh-agent-deb/etc/systemd/system
-mkdir -p wfh-agent-deb/DEBIAN
-
-# Copy files
-cp agent.py wfh-agent-deb/opt/wfh-agent/
-cp agent_requirements.txt wfh-agent-deb/opt/wfh-agent/
-cp DEBIAN/* wfh-agent-deb/DEBIAN/
-chmod 755 wfh-agent-deb/DEBIAN/postinst
-chmod 755 wfh-agent-deb/DEBIAN/prerm
-
-# Create systemd service file
-cat > wfh-agent-deb/etc/systemd/system/wfh-agent.service << 'EOF'
-[Unit]
-Description=WFH Employee Monitoring Agent
-After=network.target
-
-[Service]
-Type=simple
-User=nobody
-WorkingDirectory=/opt/wfh-agent
-ExecStart=/usr/bin/python3 /opt/wfh-agent/agent.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Build package
-dpkg-deb --build wfh-agent-deb wfh-agent.deb
+echo "Step 1: Installing Python dependencies..."
+pip3 install -r agent_requirements.txt
 
 echo
-echo "Package built successfully: wfh-agent.deb"
-echo "To install: sudo dpkg -i wfh-agent.deb"
-echo "To uninstall: sudo apt remove wfh-agent"
+echo "Step 2: Agent ready to run..."
+echo "Run: python3 agent.py"
+echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 """
-            zip_file.writestr('build_deb.sh', linux_script)
+                zip_file.writestr('install.sh', linux_script)
             
-        elif platform == 'mac':
-            # macOS package installer scripts
-            pkg_info = """<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleIdentifier</key>
-    <string>com.company.wfh-agent</string>
-    <key>CFBundleName</key>
-    <string>WFH Monitoring Agent</string>
-    <key>CFBundleVersion</key>
-    <string>1.0.0</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-</dict>
-</plist>"""
-            zip_file.writestr('PackageInfo.plist', pkg_info)
-            
-            # macOS postinstall script
-            postinstall_script = """#!/bin/bash
-set -e
-
-echo "Installing WFH Monitoring Agent..."
-
-# Install to system location
-mkdir -p /usr/local/bin/wfh-agent
-cp /tmp/wfh-installer/agent.py /usr/local/bin/wfh-agent/
-cp /tmp/wfh-installer/agent_requirements.txt /usr/local/bin/wfh-agent/
-
-# Install dependencies
-pip3 install -r /usr/local/bin/wfh-agent/agent_requirements.txt
-
-# Create LaunchDaemon for system-wide installation
-cat > /Library/LaunchDaemons/com.company.wfh-agent.plist << 'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.company.wfh-agent</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>/usr/local/bin/wfh-agent/agent.py</string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/var/log/wfh-agent.log</string>
-    <key>StandardErrorPath</key>
-    <string>/var/log/wfh-agent-error.log</string>
-</dict>
-</plist>
-EOF
-
-# Set permissions and load service
-chmod 644 /Library/LaunchDaemons/com.company.wfh-agent.plist
-launchctl load /Library/LaunchDaemons/com.company.wfh-agent.plist
-
-echo "WFH Agent installed and started successfully."
-echo "Note: Grant screen recording permissions in System Preferences > Security & Privacy"
-
-# Cleanup
-rm -rf /tmp/wfh-installer
-
-exit 0
-"""
-            zip_file.writestr('postinstall', postinstall_script)
-            
-            # macOS package builder script
-            mac_script = """#!/bin/bash
-echo "Building WFH Monitoring Agent .pkg installer for macOS..."
-echo
-
-echo "Step 1: Creating package structure..."
-mkdir -p wfh-pkg/payload/tmp/wfh-installer
-mkdir -p wfh-pkg/scripts
-
-# Copy files to payload
-cp agent.py wfh-pkg/payload/tmp/wfh-installer/
-cp agent_requirements.txt wfh-pkg/payload/tmp/wfh-installer/
-cp postinstall wfh-pkg/scripts/
-chmod +x wfh-pkg/scripts/postinstall
-
-echo
-echo "Step 2: Building package..."
-pkgbuild --root wfh-pkg/payload \\
-         --scripts wfh-pkg/scripts \\
-         --identifier com.company.wfh-agent \\
-         --version 1.0.0 \\
-         wfh-agent.pkg
-
-echo
-echo "Package built successfully: wfh-agent.pkg" 
-echo "To install: Double-click wfh-agent.pkg or run 'sudo installer -pkg wfh-agent.pkg -target /'"
-echo "To uninstall: sudo launchctl unload /Library/LaunchDaemons/com.company.wfh-agent.plist"
-"""
-            zip_file.writestr('build_pkg.sh', mac_script)
+            zip_file.writestr('README.txt', instructions)
         
         zip_buffer.seek(0)
         return StreamingResponse(
