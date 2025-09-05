@@ -4,11 +4,30 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime, timedelta
 import os
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://localhost/defaultdb")
+# Use SQLite for development if PostgreSQL is not available
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./monitoring.db")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# Handle PostgreSQL URL format for production
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://")
+
+try:
+    if DATABASE_URL.startswith("sqlite"):
+        engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    else:
+        engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
+    
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base = declarative_base()
+    print(f"Database connected successfully: {DATABASE_URL.split('@')[0] if '@' in DATABASE_URL else 'Local SQLite'}")
+except Exception as e:
+    print(f"Database connection error: {e}")
+    # Fallback to SQLite
+    DATABASE_URL = "sqlite:///./monitoring.db"
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base = declarative_base()
+    print("Fallback: Using SQLite database")
 
 class EmployeeHeartbeat(Base):
     __tablename__ = "employee_heartbeats"

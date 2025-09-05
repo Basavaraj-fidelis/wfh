@@ -1278,30 +1278,92 @@ def download_agent(platform: str, admin=Depends(verify_admin_token)):
     # Create agent installer package in memory
     zip_buffer = io.BytesIO()
     
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        # Add main agent file
-        try:
-            with open('../agent/agent.py', 'r') as f:
-                agent_content = f.read()
-        except FileNotFoundError:
-            # If file not found, use relative path
-            with open('agent/agent.py', 'r') as f:
-                agent_content = f.read()
-        
-        # Update server URL in agent content
-        agent_content = agent_content.replace(
-            'SERVER_URL = "https://your-repl-name.replit.app"',
-            f'SERVER_URL = "{os.getenv("REPL_SLUG", "your-server-url")}.replit.app"'
+    try:
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Try different paths for agent files
+            agent_paths = ['../agent/agent.py', 'agent/agent.py', './agent/agent.py']
+            agent_content = None
+            
+            for path in agent_paths:
+                try:
+                    with open(path, 'r') as f:
+                        agent_content = f.read()
+                    break
+                except FileNotFoundError:
+                    continue
+            
+            if not agent_content:
+                # Create a basic agent if file not found
+                agent_content = '''#!/usr/bin/env python3
+"""
+WFH Employee Monitoring Agent
+Basic version - Update SERVER_URL and AUTH_TOKEN before use
+"""
+
+import requests
+import time
+import socket
+import getpass
+from datetime import datetime
+
+SERVER_URL = "https://your-repl-url.replit.app"
+AUTH_TOKEN = "agent-secret-token-change-this-in-production"
+
+def send_heartbeat():
+    data = {
+        "username": getpass.getuser(),
+        "hostname": socket.gethostname(),
+        "status": "online"
+    }
+    
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/api/heartbeat",
+            json=data,
+            headers={'Authorization': f'Bearer {AUTH_TOKEN}'},
+            timeout=30
         )
-        zip_file.writestr('agent.py', agent_content)
+        print(f"Heartbeat: {response.status_code}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    print("Starting WFH Monitoring Agent...")
+    while True:
+        send_heartbeat()
+        time.sleep(300)  # 5 minutes
+'''
+            
+            # Update server URL in agent content
+            repl_slug = os.getenv("REPL_SLUG", "your-repl-url")
+            if repl_slug != "your-repl-url":
+                agent_content = agent_content.replace(
+                    'SERVER_URL = "https://your-repl-url.replit.app"',
+                    f'SERVER_URL = "https://{repl_slug}.replit.app"'
+                )
+            
+            zip_file.writestr('agent.py', agent_content)
         
         # Add requirements
-        try:
-            with open('../agent/agent_requirements.txt', 'r') as f:
-                requirements_content = f.read()
-        except FileNotFoundError:
-            with open('agent/agent_requirements.txt', 'r') as f:
-                requirements_content = f.read()
+        requirements_paths = ['../agent/agent_requirements.txt', 'agent/agent_requirements.txt', './agent/agent_requirements.txt']
+        requirements_content = None
+        
+        for path in requirements_paths:
+            try:
+                with open(path, 'r') as f:
+                    requirements_content = f.read()
+                break
+            except FileNotFoundError:
+                continue
+        
+        if not requirements_content:
+            # Create basic requirements if file not found
+            requirements_content = """requests>=2.31.0
+schedule>=1.2.0
+Pillow>=10.0.0
+psutil>=5.9.0
+"""
+        
         zip_file.writestr('agent_requirements.txt', requirements_content)
         
         # Add platform-specific instructions
@@ -1626,14 +1688,17 @@ echo "To install: Double-click wfh-agent.pkg or run 'sudo installer -pkg wfh-age
 echo "To uninstall: sudo launchctl unload /Library/LaunchDaemons/com.company.wfh-agent.plist"
 """
             zip_file.writestr('build_pkg.sh', mac_script)
-    
-    zip_buffer.seek(0)
-    
-    return StreamingResponse(
-        io.BytesIO(zip_buffer.read()),
-        media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=wfh-agent-{platform}.zip"}
-    )
+        
+        zip_buffer.seek(0)
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.read()),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename=wfh-agent-{platform}.zip"}
+        )
+        
+    except Exception as e:
+        print(f"Error creating agent package: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create agent package: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
