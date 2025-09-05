@@ -1218,7 +1218,7 @@ def dashboard():
                         </ol>
                         
                         <h4 style="margin-top: 20px;">Configuration</h4>
-                        <p><strong>Server URL:</strong> <span id="serverUrl">${window.location.origin}</span></p>
+                        <p><strong>Server URL:</strong> <span id="serverUrl">' + window.location.origin + '</span></p>
                         <p><strong>Agent Token:</strong> <code>agent-secret-token-change-this-in-production</code></p>
                     </div>
                 </div>
@@ -1292,19 +1292,16 @@ def dashboard():
             async function login(event) {
                 event.preventDefault();
                 
-                // Clear any previous alerts
                 document.getElementById('loginAlert').innerHTML = '';
                 
                 const username = document.getElementById('username').value.trim();
                 const password = document.getElementById('password').value;
                 
-                // Basic validation
                 if (!username || !password) {
                     showAlert('loginAlert', 'Please enter both username and password', 'error');
                     return;
                 }
                 
-                // Show loading state
                 const loginButton = event.target.querySelector('button[type="submit"]');
                 const originalText = loginButton.textContent;
                 loginButton.textContent = 'Logging in...';
@@ -1319,7 +1316,7 @@ def dashboard():
                             'Content-Type': 'application/json',
                             'Accept': 'application/json'
                         },
-                        body: JSON.stringify({ username, password })
+                        body: JSON.stringify({ username: username, password: password })
                     });
                     
                     console.log('Login response status:', response.status);
@@ -1351,7 +1348,6 @@ def dashboard():
                     console.error('Login error:', error);
                     showAlert('loginAlert', 'Connection error: ' + error.message, 'error');
                 } finally {
-                    // Restore button state
                     loginButton.textContent = originalText;
                     loginButton.disabled = false;
                 }
@@ -1370,9 +1366,8 @@ def dashboard():
             }
             
             function showSection(section) {
-                // Update navigation
                 document.querySelectorAll('.nav-menu a').forEach(a => a.classList.remove('active'));
-                event.target.classList.add('active');
+                document.querySelector('.nav-menu a[onclick*="' + section + '"]').classList.add('active');
                 
                 // Hide all sections
                 document.querySelectorAll('.content-section').forEach(s => s.classList.remove('active'));
@@ -1607,9 +1602,8 @@ def dashboard():
             
             // Report Tab Functions
             function showReportTab(tabName) {
-                // Update tab styling
                 document.querySelectorAll('.report-tab').forEach(tab => tab.classList.remove('active'));
-                event.target.classList.add('active');
+                document.querySelector('.report-tab[onclick*="' + tabName + '"]').classList.add('active');
                 
                 // Hide all tab content
                 document.querySelectorAll('.report-content').forEach(content => content.style.display = 'none');
@@ -1631,7 +1625,7 @@ def dashboard():
                         const data = await response.json();
                         
                         let reportHtml = '<div class="export-buttons">' +
-                                '<button class="btn btn-success" onclick="exportReport(\'daily\', \'' + date + '\')">📊 Export CSV</button>' +
+                                '<button class="btn btn-success" onclick="exportReport(\\\'daily\\\', \\\'' + date + '\\\')">📊 Export CSV</button>' +
                             '</div>' +
                             '<div class="summary-grid">' +
                                 '<div class="summary-card">' +
@@ -1705,7 +1699,7 @@ def dashboard():
                         const data = await response.json();
                         
                         let reportHtml = '<div class="export-buttons">' +
-                                '<button class="btn btn-success" onclick="exportReport(\'weekly\', \'' + startDate + '\')">📊 Export CSV</button>' +
+                                '<button class="btn btn-success" onclick="exportReport(\\\'weekly\\\', \\\'' + startDate + '\\\')">📊 Export CSV</button>' +
                             '</div>' +
                             '<div class="summary-grid">' +
                                 '<div class="summary-card">' +
@@ -1783,7 +1777,7 @@ def dashboard():
                         const data = await response.json();
                         
                         let reportHtml = '<div class="export-buttons">' +
-                                '<button class="btn btn-success" onclick="exportReport(\'custom\', \'' + startDate + '_' + endDate + '\')">📊 Export CSV</button>' +
+                                '<button class="btn btn-success" onclick="exportReport(\\\'custom\\\', \\\'' + startDate + '_' + endDate + '\\\')">📊 Export CSV</button>' +
                             '</div>' +
                             '<div class="summary-grid">' +
                                 '<div class="summary-card">' +
