@@ -17,6 +17,8 @@ import requests
 from datetime import datetime, timedelta
 from PIL import ImageGrab
 import getpass
+import psutil
+import subprocess
 
 class MonitoringAgent:
     def __init__(self, server_url, auth_token):
@@ -27,6 +29,9 @@ class MonitoringAgent:
         self.last_detailed_log = None
         self.detailed_logs_today = 0
         self.current_date = datetime.now().date()
+        self.last_activity_time = time.time()
+        self.activity_log = []
+        self.app_usage_log = []
         
     def get_headers(self):
         """Get authentication headers"""
@@ -95,6 +100,292 @@ class MonitoringAgent:
             return True
         except ValueError:
             return False
+    
+    def get_idle_time(self):
+        """Get system idle time in seconds - Cross-platform"""
+        try:
+            system = platform.system()
+            
+            if system == "Windows":
+                # Windows: Use GetLastInputInfo via ctypes
+                import ctypes
+                from ctypes import wintypes
+                
+                class LASTINPUTINFO(ctypes.Structure):
+                    _fields_ = [('cbSize', wintypes.UINT), ('dwTime', wintypes.DWORD)]
+                
+                def get_last_input_time():
+                    lii = LASTINPUTINFO()
+                    lii.cbSize = ctypes.sizeof(LASTINPUTINFO)
+                    ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii))
+                    return lii.dwTime
+                
+                millis = ctypes.windll.kernel32.GetTickCount() - get_last_input_time()
+                return millis / 1000.0
+                
+            elif system == "Darwin":  # macOS
+                # macOS: Use Core Graphics
+                try:
+                    import Quartz
+                    idle_time = Quartz.CGEventSourceSecondsSinceLastEventType(
+                        Quartz.kCGEventSourceStateCombinedSessionState,
+                        Quartz.kCGAnyInputEventType
+                    )
+                    return idle_time
+                except ImportError:
+                    # Fallback: Use ioreg command
+                    try:
+                        output = subprocess.check_output(['ioreg', '-c', 'IOHIDSystem'], 
+                                                       universal_newlines=True, timeout=5)
+                        for line in output.split('\n'):
+                            if '"HIDIdleTime"' in line:
+                                idle_ns = int(line.split('=')[1].strip())
+                                return idle_ns / 1000000000.0  # Convert nanoseconds to seconds
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError):
+                        pass
+                    return 0
+                    
+            elif system == "Linux":
+                # Linux: Try multiple methods
+                try:
+                    # Method 1: xprintidle (if available)
+                    result = subprocess.run(['xprintidle'], capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        return int(result.stdout.strip()) / 1000.0  # Convert ms to seconds
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+                
+                try:
+                    # Method 2: Parse /proc/interrupts for input devices
+                    with open('/proc/interrupts', 'r') as f:
+                        content = f.read()
+                    # This is a simplified approach - in reality you'd track changes over time
+                    return 0  # Placeholder - would need more complex implementation
+                except:
+                    pass
+                    
+            return 0  # Unknown system or method failed
+            
+        except Exception as e:
+            print(f"Error getting idle time: {e}")
+            return 0
+    
+    def get_active_window_info(self):
+        """Get information about the currently active window/application"""
+        try:
+            system = platform.system()
+            
+            if system == "Windows":
+                # Windows: Use Win32 API
+                import ctypes
+                from ctypes import wintypes
+                
+                user32 = ctypes.windll.user32
+                
+                # Get foreground window
+                hwnd = user32.GetForegroundWindow()
+                if hwnd:
+                    # Get window title
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    window_title = buff.value
+                    
+                    # Get process ID and name
+                    pid = wintypes.DWORD()
+                    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                    
+                    try:
+                        process = psutil.Process(pid.value)
+                        app_name = process.name()
+                        return {
+                            "app_name": app_name,
+                            "window_title": window_title,
+                            "pid": pid.value
+                        }
+                    except psutil.NoSuchProcess:
+                        return {
+                            "app_name": "Unknown",
+                            "window_title": window_title,
+                            "pid": pid.value
+                        }
+                        
+            elif system == "Darwin":  # macOS
+                # macOS: Use AppleScript
+                try:
+                    script = '''
+                    tell application "System Events"
+                        set frontApp to first application process whose frontmost is true
+                        set appName to name of frontApp
+                        try
+                            set windowTitle to name of first window of frontApp
+                        on error
+                            set windowTitle to ""
+                        end try
+                        return appName & "|" & windowTitle
+                    end tell
+                    '''
+                    result = subprocess.run(['osascript', '-e', script], 
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split('|', 1)
+                        return {
+                            "app_name": parts[0] if parts else "Unknown",
+                            "window_title": parts[1] if len(parts) > 1 else "",
+                            "pid": 0
+                        }
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    pass
+                    
+            elif system == "Linux":
+                # Linux: Use xdotool or wmctrl
+                try:
+                    # Try xdotool first
+                    result = subprocess.run(['xdotool', 'getactivewindow', 'getwindowname'], 
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        window_title = result.stdout.strip()
+                        
+                        # Get process info
+                        pid_result = subprocess.run(['xdotool', 'getactivewindow', 'getwindowpid'], 
+                                                  capture_output=True, text=True, timeout=5)
+                        if pid_result.returncode == 0:
+                            try:
+                                pid = int(pid_result.stdout.strip())
+                                process = psutil.Process(pid)
+                                app_name = process.name()
+                                return {
+                                    "app_name": app_name,
+                                    "window_title": window_title,
+                                    "pid": pid
+                                }
+                            except (ValueError, psutil.NoSuchProcess):
+                                pass
+                        
+                        return {
+                            "app_name": "Unknown",
+                            "window_title": window_title,
+                            "pid": 0
+                        }
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+                    
+            return {
+                "app_name": "Unknown",
+                "window_title": "Unknown",
+                "pid": 0
+            }
+            
+        except Exception as e:
+            print(f"Error getting active window info: {e}")
+            return {
+                "app_name": "Unknown",
+                "window_title": "Unknown", 
+                "pid": 0
+            }
+    
+    def track_activity(self):
+        """Track user activity and app usage"""
+        try:
+            current_time = time.time()
+            idle_time = self.get_idle_time()
+            
+            # Consider active if idle time is less than 30 seconds
+            is_active = idle_time < 30
+            
+            # Log activity status
+            activity_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "is_active": is_active,
+                "idle_time": idle_time
+            }
+            
+            self.activity_log.append(activity_entry)
+            
+            # Track app usage if active
+            if is_active:
+                window_info = self.get_active_window_info()
+                app_entry = {
+                    "timestamp": datetime.now().isoformat(),
+                    "app_name": window_info["app_name"],
+                    "window_title": window_info["window_title"],
+                    "pid": window_info["pid"]
+                }
+                self.app_usage_log.append(app_entry)
+            
+            # Keep only last 24 hours of data
+            cutoff_time = datetime.now() - timedelta(hours=24)
+            cutoff_iso = cutoff_time.isoformat()
+            
+            self.activity_log = [
+                entry for entry in self.activity_log 
+                if entry["timestamp"] > cutoff_iso
+            ]
+            
+            self.app_usage_log = [
+                entry for entry in self.app_usage_log 
+                if entry["timestamp"] > cutoff_iso
+            ]
+            
+        except Exception as e:
+            print(f"Error tracking activity: {e}")
+    
+    def get_activity_summary(self):
+        """Generate activity summary for the current day"""
+        try:
+            today = datetime.now().date()
+            today_entries = [
+                entry for entry in self.activity_log 
+                if datetime.fromisoformat(entry["timestamp"]).date() == today
+            ]
+            
+            if not today_entries:
+                return {
+                    "total_active_time": 0,
+                    "total_idle_time": 0,
+                    "activity_rate": 0,
+                    "app_usage": {}
+                }
+            
+            # Calculate active vs idle time
+            active_entries = [e for e in today_entries if e["is_active"]]
+            total_active_time = len(active_entries) * 60  # 1 minute intervals
+            total_time = len(today_entries) * 60
+            total_idle_time = total_time - total_active_time
+            activity_rate = (total_active_time / total_time * 100) if total_time > 0 else 0
+            
+            # Calculate app usage
+            app_usage = {}
+            today_app_entries = [
+                entry for entry in self.app_usage_log 
+                if datetime.fromisoformat(entry["timestamp"]).date() == today
+            ]
+            
+            for entry in today_app_entries:
+                app_name = entry["app_name"]
+                if app_name in app_usage:
+                    app_usage[app_name] += 1
+                else:
+                    app_usage[app_name] = 1
+            
+            # Convert counts to minutes (assuming 1 minute intervals)
+            app_usage = {app: count * 1 for app, count in app_usage.items()}
+            
+            return {
+                "total_active_time": total_active_time,
+                "total_idle_time": total_idle_time,
+                "activity_rate": round(activity_rate, 2),
+                "app_usage": app_usage
+            }
+            
+        except Exception as e:
+            print(f"Error generating activity summary: {e}")
+            return {
+                "total_active_time": 0,
+                "total_idle_time": 0,
+                "activity_rate": 0,
+                "app_usage": {}
+            }
     
     def get_location(self, public_ip):
         """Get approximate location from IP using multiple services"""
@@ -282,12 +573,16 @@ class MonitoringAgent:
                 }
                 screenshot_file = temp_file.name
             
+            # Get activity summary
+            activity_summary = self.get_activity_summary()
+            
             data = {
                 'username': self.username,
                 'hostname': self.hostname,
                 'local_ip': local_ip,
                 'public_ip': public_ip,
-                'location': location
+                'location': location,
+                'activity_data': json.dumps(activity_summary)
             }
             
             print(f"Sending data: {data}")
@@ -373,12 +668,17 @@ class MonitoringAgent:
         
         print("Agent started and running in background mode.")
         print("Agent will continue running until process is terminated.")
+        print("Activity tracking enabled - monitoring user activity and app usage.")
         
         # Main loop - no interactive input required
         try:
             while True:
                 schedule.run_pending()
-                time.sleep(30)  # Check every 30 seconds for background service
+                
+                # Track activity every minute
+                self.track_activity()
+                
+                time.sleep(60)  # Check every minute for activity tracking
         except KeyboardInterrupt:
             print("\nAgent stopped by user.")
         except Exception as e:

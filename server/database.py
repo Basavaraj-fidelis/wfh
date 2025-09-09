@@ -16,7 +16,7 @@ try:
         engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
     else:
         engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=300)
-    
+
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     Base = declarative_base()
     print(f"Database connected successfully: {DATABASE_URL.split('@')[0] if '@' in DATABASE_URL else 'Local SQLite'}")
@@ -31,7 +31,7 @@ except Exception as e:
 
 class EmployeeHeartbeat(Base):
     __tablename__ = "employee_heartbeats"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, index=True)
     hostname = Column(String)
@@ -41,7 +41,7 @@ class EmployeeHeartbeat(Base):
 
 class EmployeeLog(Base):
     __tablename__ = "employee_logs"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, index=True)
     hostname = Column(String)
@@ -52,9 +52,22 @@ class EmployeeLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+class EmployeeDetailedLog(Base):
+    __tablename__ = "employee_detailed_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True)
+    hostname = Column(String)
+    local_ip = Column(String)
+    public_ip = Column(String)
+    location = Column(Text)  # JSON string
+    screenshot_path = Column(String)
+    activity_data = Column(Text, default="{}")  # JSON string for activity tracking
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
 class AdminUser(Base):
     __tablename__ = "admin_users"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
