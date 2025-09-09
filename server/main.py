@@ -237,7 +237,94 @@ def debug_admin_user(db: Session = Depends(get_db)):
             "database_connected": False
         }
 
-# Admin dashboard endpoints
+# Admin dashboard endpoints  
+@app.get("/api/admin/employees/enhanced")
+def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = Depends(get_db)):
+    """Get enhanced employee data with working hours and productivity for today"""
+    today = datetime.utcnow().date()
+    start_of_day = datetime.combine(today, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+    
+    # Get all employees who have any activity
+    all_employees = db.query(EmployeeHeartbeat.username).distinct().all()
+    
+    enhanced_data = []
+    employee_id = 1
+    
+    for (username,) in all_employees:
+        # Get today's heartbeats
+        heartbeats = db.query(EmployeeHeartbeat).filter(
+            EmployeeHeartbeat.username == username,
+            EmployeeHeartbeat.timestamp >= start_of_day,
+            EmployeeHeartbeat.timestamp < end_of_day
+        ).order_by(EmployeeHeartbeat.timestamp).all()
+        
+        # Get latest heartbeat for status
+        latest_heartbeat = db.query(EmployeeHeartbeat).filter(
+            EmployeeHeartbeat.username == username
+        ).order_by(desc(EmployeeHeartbeat.timestamp)).first()
+        
+        # Get latest log for location
+        latest_log = db.query(EmployeeLog).filter(
+            EmployeeLog.username == username
+        ).order_by(desc(EmployeeLog.timestamp)).first()
+        
+        # Determine status
+        cutoff_time = datetime.utcnow() - timedelta(minutes=10)
+        status = "online" if latest_heartbeat and latest_heartbeat.timestamp > cutoff_time else "offline"
+        
+        # Calculate working hours and times
+        if heartbeats:
+            first_activity = heartbeats[0].timestamp
+            last_activity = heartbeats[-1].timestamp
+            
+            # Calculate active time (sum of gaps <= 15 minutes)
+            active_seconds = 0
+            for i in range(len(heartbeats) - 1):
+                gap = (heartbeats[i + 1].timestamp - heartbeats[i].timestamp).total_seconds()
+                if gap <= 900:  # 15 minutes
+                    active_seconds += gap
+            
+            working_hours = active_seconds / 3600
+            
+            # Calculate productivity (simple metric: active time / total time * 100)
+            total_span = (last_activity - first_activity).total_seconds() / 3600
+            productivity = (working_hours / total_span * 100) if total_span > 0 else 0
+        else:
+            first_activity = None
+            last_activity = None 
+            working_hours = 0
+            productivity = 0
+        
+        # Parse location
+        location_text = "Unknown"
+        public_ip = "Unknown"
+        if latest_log and latest_log.location:
+            try:
+                location_data = json.loads(latest_log.location)
+                public_ip = location_data.get('ip', 'Unknown')
+                location_text = f"{location_data.get('city', 'Unknown')}, {location_data.get('region', 'Unknown')}"
+            except:
+                pass
+        
+        enhanced_data.append({
+            "id": f"D{employee_id:03d}",
+            "username": username,
+            "status": status,
+            "start_time": first_activity.strftime("%H:%M") if first_activity else "--:--",
+            "end_time": last_activity.strftime("%H:%M") if last_activity else "--:--", 
+            "working_hours": f"{int(working_hours)}h {int((working_hours % 1) * 60)}m",
+            "productivity": f"{int(productivity)}%" if productivity > 0 else "--",
+            "public_ip": public_ip,
+            "location": location_text,
+            "last_seen": latest_heartbeat.timestamp if latest_heartbeat else None,
+            "raw_hours": working_hours,
+            "raw_productivity": productivity
+        })
+        employee_id += 1
+    
+    return {"employees": enhanced_data}
+
 @app.get("/api/admin/employees/status")
 def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends(get_db)):
     """Get current online status of all employees with location details"""

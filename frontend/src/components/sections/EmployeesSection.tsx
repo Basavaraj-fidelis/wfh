@@ -3,14 +3,19 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 interface Employee {
+  id: string;
   username: string;
-  hostname: string;
+  hostname?: string;
   status: 'online' | 'offline';
-  last_seen: string;
+  start_time: string;
+  end_time: string;
+  working_hours: string;
+  productivity: string;
   public_ip: string;
-  city: string;
-  state: string;
-  country: string;
+  location: string;
+  last_seen: string;
+  raw_hours: number;
+  raw_productivity: number;
 }
 
 interface LogEntry {
@@ -55,7 +60,7 @@ const EmployeesSection: React.FC = () => {
 
   const loadEmployees = async () => {
     try {
-      const response = await axios.get('/api/admin/employees/status');
+      const response = await axios.get('/api/admin/employees/enhanced');
       setEmployees(response.data.employees || []);
     } catch (error) {
       console.error('Failed to load employees:', error);
@@ -65,7 +70,7 @@ const EmployeesSection: React.FC = () => {
   const filterAndSortEmployees = () => {
     let filtered = employees.filter(emp => {
       const matchesSearch = emp.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           emp.hostname.toLowerCase().includes(searchTerm.toLowerCase());
+                           emp.id.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = !statusFilter || emp.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -74,12 +79,12 @@ const EmployeesSection: React.FC = () => {
       switch (sortBy) {
         case 'name':
           return a.username.localeCompare(b.username);
-        case 'status':
-          return a.status.localeCompare(b.status);
-        case 'lastSeen':
-          return new Date(b.last_seen).getTime() - new Date(a.last_seen).getTime();
-        case 'location':
-          return a.city.localeCompare(b.city);
+        case 'id':
+          return a.id.localeCompare(b.id);
+        case 'hours':
+          return b.raw_hours - a.raw_hours;
+        case 'productivity':
+          return b.raw_productivity - a.raw_productivity;
         default:
           return 0;
       }
@@ -278,10 +283,10 @@ const EmployeesSection: React.FC = () => {
         </div>
         <div className="filter-select">
           <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="id">Sort by ID</option>
             <option value="name">Sort by Name</option>
-            <option value="status">Sort by Status</option>
-            <option value="lastSeen">Sort by Last Seen</option>
-            <option value="location">Sort by Location</option>
+            <option value="hours">Sort by Working Hours</option>
+            <option value="productivity">Sort by Productivity</option>
           </select>
         </div>
       </div>
@@ -290,45 +295,53 @@ const EmployeesSection: React.FC = () => {
         <table className="table">
           <thead>
             <tr>
-              <th>Employee</th>
-              <th>Hostname</th>
-              <th>Status</th>
-              <th>Public IP</th>
-              <th>Location</th>
-              <th>Last Seen</th>
-              <th>Actions</th>
+              <th>ID</th>
+              <th>User Name</th>
+              <th>Start time</th>
+              <th>End Time</th>
+              <th>Working Hrs</th>
+              <th>Productivity</th>
             </tr>
           </thead>
           <tbody>
             {filteredEmployees.map((emp) => (
-              <tr key={`${emp.username}-${emp.hostname}`}>
-                <td><strong>{emp.username}</strong></td>
-                <td>{emp.hostname}</td>
-                <td className={emp.status === 'online' ? 'status-online' : 'status-offline'}>
-                  {emp.status === 'online' ? '🟢 Online' : '🔴 Offline'}
-                </td>
-                <td>{emp.public_ip}</td>
+              <tr key={emp.id} 
+                  onClick={() => viewEmployeeLogs(emp.username)}
+                  style={{ 
+                    cursor: 'pointer',
+                    backgroundColor: emp.status === 'online' ? '#f8f9fa' : '#fff'
+                  }}
+                  className="employee-row"
+              >
+                <td><strong>{emp.id}</strong></td>
                 <td>
-                  <div style={{ fontSize: '12px' }}>
-                    <div>🏙️ {emp.city}, {emp.state}</div>
-                    <div>🌍 {emp.country}</div>
+                  <strong>{emp.username}</strong>
+                  <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                    {emp.status === 'online' ? '🟢 Online' : '🔴 Offline'} • {emp.public_ip}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#888' }}>
+                    📍 {emp.location}
                   </div>
                 </td>
-                <td>{new Date(emp.last_seen).toLocaleString()}</td>
                 <td>
-                  <button 
-                    className="btn btn-primary-sm" 
-                    onClick={() => viewEmployeeLogs(emp.username)}
-                    style={{ marginRight: '5px' }}
-                  >
-                    View Logs
-                  </button>
-                  <button 
-                    className="btn btn-success" 
-                    onClick={() => viewWorkingHours(emp.username)}
-                  >
-                    Working Hours
-                  </button>
+                  <span className={emp.start_time !== '--:--' ? 'time-active' : 'time-inactive'}>
+                    {emp.start_time}
+                  </span>
+                </td>
+                <td>
+                  <span className={emp.end_time !== '--:--' ? 'time-active' : 'time-inactive'}>
+                    {emp.end_time}
+                  </span>
+                </td>
+                <td>
+                  <span className={emp.raw_hours > 0 ? 'hours-active' : 'hours-inactive'}>
+                    {emp.working_hours}
+                  </span>
+                </td>
+                <td>
+                  <span className={`productivity-${emp.raw_productivity >= 80 ? 'high' : emp.raw_productivity >= 60 ? 'medium' : 'low'}`}>
+                    {emp.productivity}
+                  </span>
                 </td>
               </tr>
             ))}
