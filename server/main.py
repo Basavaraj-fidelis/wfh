@@ -288,17 +288,17 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             working_hours = active_seconds / 3600
             
             # Calculate productivity based on office standards
-            # Office standard: 8 hours productive out of 9 hours = 88.89% productivity
+            # Office standard: 8 productive hours out of 9 total office hours
             total_span = (last_activity - first_activity).total_seconds() / 3600
             
             if total_span > 0:
-                # If working less than 4 hours, use direct ratio
-                if total_span < 4:
+                # If working less than 6 hours, use direct ratio (part-time/half day)
+                if total_span < 6:
                     productivity = (working_hours / total_span * 100)
                 else:
-                    # For full working day (4+ hours), calculate based on 8h/9h standard
-                    expected_productive_hours = min(total_span * 0.8889, 8.0)  # 88.89% of time or max 8 hours
-                    productivity = min((working_hours / expected_productive_hours * 100), 100)
+                    # For full working day (6+ hours), expect 8 productive hours
+                    # Productivity = (actual_active_hours / 8) * 100
+                    productivity = min((working_hours / 8.0 * 100), 100)
             else:
                 productivity = 0
         else:
@@ -562,12 +562,14 @@ def get_daily_report(
             total_span_hours = (last_heartbeat - first_heartbeat).total_seconds() / 3600
             
             # Calculate productivity based on office standards
+            # Office standard: 8 productive hours out of 9 total office hours
             if total_span_hours > 0:
-                if total_span_hours < 4:
+                if total_span_hours < 6:
+                    # For part-time/half day, use direct ratio
                     productivity = (active_hours / total_span_hours * 100)
                 else:
-                    expected_productive_hours = min(total_span_hours * 0.8889, 8.0)
-                    productivity = min((active_hours / expected_productive_hours * 100), 100)
+                    # For full working day, expect 8 productive hours
+                    productivity = min((active_hours / 8.0 * 100), 100)
             else:
                 productivity = 0
             
