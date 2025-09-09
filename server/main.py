@@ -13,8 +13,8 @@ from pydantic import BaseModel
 from database import get_db, create_tables, EmployeeHeartbeat, EmployeeLog, AdminUser
 from auth import verify_admin_token, verify_agent_token, get_password_hash, create_access_token, verify_password
 
-# Create FastAPI app
-app = FastAPI(title="WFH Employee Monitoring System", version="1.0.0")
+# Create FastAPI app with lifespan
+app = FastAPI(title="WFH Employee Monitoring System", version="1.0.0", lifespan=lifespan)
 
 # CORS middleware
 app.add_middleware(
@@ -61,9 +61,12 @@ class WorkingHoursResponse(BaseModel):
     first_seen: datetime
     last_seen: datetime
 
-# Initialize database on startup
-@app.on_event("startup")
-def startup_event():
+# Initialize database using lifespan context manager
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     try:
         print("Starting up application...")
         create_tables()
@@ -87,6 +90,11 @@ def startup_event():
         print(f"Startup error: {e}")
         import traceback
         traceback.print_exc()
+    
+    yield
+    
+    # Shutdown (if needed)
+    print("Application shutting down...")
 
 # Agent endpoints
 @app.post("/api/heartbeat")
