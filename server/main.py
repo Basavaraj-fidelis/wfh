@@ -296,14 +296,18 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             working_hours = 0
             productivity = 0
         
-        # Parse location
-        location_text = "Unknown"
+        # Parse location and determine work location
+        location_text = "Remote work"
         public_ip = "Unknown"
         if latest_log and latest_log.location:
             try:
                 location_data = json.loads(latest_log.location)
                 public_ip = location_data.get('ip', 'Unknown')
-                location_text = f"{location_data.get('city', 'Unknown')}, {location_data.get('region', 'Unknown')}"
+                # Check if this is the office IP
+                if public_ip == "14.96.131.106":
+                    location_text = "Office Bangalore"
+                else:
+                    location_text = "Remote work"
             except:
                 pass
         
@@ -323,7 +327,25 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
         })
         employee_id += 1
     
-    return {"employees": enhanced_data}
+    # Calculate summary statistics for dashboard
+    total_employees = len(enhanced_data)
+    office_employees = [emp for emp in enhanced_data if emp['location'] == 'Office Bangalore']
+    remote_employees = [emp for emp in enhanced_data if emp['location'] == 'Remote work']
+    
+    # Calculate average productivity for each location
+    office_productivity = sum([emp['raw_productivity'] for emp in office_employees]) / len(office_employees) if office_employees else 0
+    remote_productivity = sum([emp['raw_productivity'] for emp in remote_employees]) / len(remote_employees) if remote_employees else 0
+    
+    return {
+        "employees": enhanced_data,
+        "dashboard_stats": {
+            "total_employees": total_employees,
+            "office_count": len(office_employees),
+            "remote_count": len(remote_employees),
+            "office_productivity": round(office_productivity),
+            "remote_productivity": round(remote_productivity)
+        }
+    }
 
 @app.get("/api/admin/employees/status")
 def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends(get_db)):
