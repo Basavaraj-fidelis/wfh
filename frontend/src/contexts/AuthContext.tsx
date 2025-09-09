@@ -48,8 +48,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.data.access_token) {
         const newToken = response.data.access_token;
-        setToken(newToken);
+        
+        // Set the token first
         localStorage.setItem('adminToken', newToken);
+        
+        // Update axios defaults immediately for this session
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        
+        // Then update state
+        setToken(newToken);
+        
         return true;
       }
       return false;
@@ -62,6 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = () => {
     setToken(null);
     localStorage.removeItem('adminToken');
+    delete axios.defaults.headers.common['Authorization'];
   };
 
   const isAuthenticated = !!token && isTokenValid(token);
@@ -71,6 +80,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const savedToken = localStorage.getItem('adminToken');
     if (savedToken && isTokenValid(savedToken)) {
       setToken(savedToken);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
     } else if (savedToken) {
       localStorage.removeItem('adminToken');
     }
