@@ -90,9 +90,9 @@ async def lifespan(app: FastAPI):
         print(f"Startup error: {e}")
         import traceback
         traceback.print_exc()
-    
+
     yield
-    
+
     # Shutdown (if needed)
     print("Application shutting down...")
 
@@ -865,7 +865,7 @@ class WFHAgentService(win32serviceutil.ServiceFramework):
         # Get the directory where the service is running
         service_dir = os.path.dirname(os.path.abspath(__file__))
         agent_path = os.path.join(service_dir, 'agent.py')
-        
+
         while self.is_alive:
             try:
                 # Start the agent process
@@ -873,19 +873,19 @@ class WFHAgentService(win32serviceutil.ServiceFramework):
                                          cwd=service_dir,
                                          stdout=subprocess.PIPE, 
                                          stderr=subprocess.PIPE)
-                
+
                 # Wait for process to complete or service to stop
                 while self.is_alive and process.poll() is None:
                     time.sleep(1)
-                
+
                 if not self.is_alive:
                     process.terminate()
                     break
-                    
+
                 # If process died, wait before restarting
                 if self.is_alive:
                     time.sleep(30)
-                    
+
             except Exception as e:
                 servicemanager.LogErrorMsg(f"Service error: {e}")
                 if self.is_alive:
