@@ -13,6 +13,41 @@ from pydantic import BaseModel
 from database import get_db, create_tables, EmployeeHeartbeat, EmployeeLog, AdminUser
 from auth import verify_admin_token, verify_agent_token, get_password_hash, create_access_token, verify_password
 
+# Initialize database using lifespan context manager
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    try:
+        print("Starting up application...")
+        create_tables()
+        print("Database tables created successfully")
+
+        # Create default admin user if none exists
+        db = next(get_db())
+        admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
+        if not admin:
+            print("Creating default admin user...")
+            hashed_password = get_password_hash("admin123")
+            admin_user = AdminUser(username="admin", hashed_password=hashed_password)
+            db.add(admin_user)
+            db.commit()
+            print("Default admin user created: admin/admin123")
+        else:
+            print("Admin user already exists")
+        db.close()
+        print("Application startup completed successfully")
+    except Exception as e:
+        print(f"Startup error: {e}")
+        import traceback
+        traceback.print_exc()
+
+    yield
+
+    # Shutdown (if needed)
+    print("Application shutting down...")
+
 # Create FastAPI app with lifespan
 app = FastAPI(title="WFH Employee Monitoring System", version="1.0.0", lifespan=lifespan)
 
@@ -60,41 +95,6 @@ class WorkingHoursResponse(BaseModel):
     total_hours: float
     first_seen: datetime
     last_seen: datetime
-
-# Initialize database using lifespan context manager
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    try:
-        print("Starting up application...")
-        create_tables()
-        print("Database tables created successfully")
-
-        # Create default admin user if none exists
-        db = next(get_db())
-        admin = db.query(AdminUser).filter(AdminUser.username == "admin").first()
-        if not admin:
-            print("Creating default admin user...")
-            hashed_password = get_password_hash("admin123")
-            admin_user = AdminUser(username="admin", hashed_password=hashed_password)
-            db.add(admin_user)
-            db.commit()
-            print("Default admin user created: admin/admin123")
-        else:
-            print("Admin user already exists")
-        db.close()
-        print("Application startup completed successfully")
-    except Exception as e:
-        print(f"Startup error: {e}")
-        import traceback
-        traceback.print_exc()
-
-    yield
-
-    # Shutdown (if needed)
-    print("Application shutting down...")
 
 # Agent endpoints
 @app.post("/api/heartbeat")
