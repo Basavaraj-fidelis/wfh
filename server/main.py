@@ -969,33 +969,112 @@ WFH Monitoring Agent - Linux Installation
 2. Extract this ZIP file to a folder (e.g., /opt/wfh-agent/)
 3. Open terminal
 4. Navigate to the folder: cd /opt/wfh-agent
-5. Install requirements: pip3 install -r agent_requirements.txt
-6. Run the agent: python3 agent.py
-7. For service: Create systemd service file
+5. Run the installer: chmod +x install.sh && ./install.sh
+6. Choose service mode for automatic startup
 
 Configuration:
 - Server URL: {current_url}
 - Agent Token: agent-secret-token-change-this-in-production
 
-### Linux Setup:
-- Install python3-pip if not available: sudo apt install python3-pip
-- For startup: Create systemd service or add to ~/.profile
-- May need to install python3-tk for screenshot functionality
+### Service Management:
+- Enable auto-start: sudo systemctl enable wfh-monitoring-agent
+- Start service: sudo systemctl start wfh-monitoring-agent
+- Check status: sudo systemctl status wfh-monitoring-agent
+- View logs: sudo journalctl -u wfh-monitoring-agent -f
 """
+
+                # Linux systemd service file
+                systemd_service = f'''[Unit]
+Description=WFH Monitoring Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{USER}}
+WorkingDirectory={{PWD}}
+ExecStart=/usr/bin/python3 {{PWD}}/agent.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths={{PWD}}
+
+[Install]
+WantedBy=multi-user.target
+'''
 
                 # Linux installation script
                 linux_script = """#!/bin/bash
-echo "Installing WFH Monitoring Agent for Linux..."
+set -e
+
+echo "============================================"
+echo "WFH Monitoring Agent - Linux Installation"
+echo "============================================"
 echo
+
+# Get current user and directory
+CURRENT_USER="$(whoami)"
+CURRENT_DIR="$(pwd)"
 
 echo "Step 1: Installing Python dependencies..."
-pip3 install -r agent_requirements.txt
+if command -v pip3 >/dev/null 2>&1; then
+    pip3 install -r agent_requirements.txt
+elif command -v pip >/dev/null 2>&1; then
+    pip install -r agent_requirements.txt
+else
+    echo "Error: pip not found. Installing python3-pip..."
+    if command -v apt-get >/dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y python3-pip python3-tk
+    elif command -v yum >/dev/null 2>&1; then
+        sudo yum install -y python3-pip tkinter
+    elif command -v dnf >/dev/null 2>&1; then
+        sudo dnf install -y python3-pip python3-tkinter
+    else
+        echo "Error: Package manager not found. Please install python3-pip manually."
+        exit 1
+    fi
+    pip3 install -r agent_requirements.txt
+fi
 
 echo
-echo "Step 2: Agent ready to run..."
-echo "Run: python3 agent.py"
-echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
+echo "Step 2: Setting up systemd service..."
+
+# Update service file with current user and directory
+sed -e "s|{USER}|$CURRENT_USER|g" -e "s|{PWD}|$CURRENT_DIR|g" wfh-monitoring-agent.service > /tmp/wfh-monitoring-agent.service
+
+# Copy service file to systemd directory
+sudo cp /tmp/wfh-monitoring-agent.service /etc/systemd/system/
+sudo chmod 644 /etc/systemd/system/wfh-monitoring-agent.service
+
+# Reload systemd
+sudo systemctl daemon-reload
+
+echo
+echo "Step 3: Installation complete!"
+echo
+echo "Choose your preferred mode:"
+echo "[1] Manual Mode: python3 agent.py"
+echo "[2] Service Mode (Recommended):"
+echo "    - Enable:  sudo systemctl enable wfh-monitoring-agent"
+echo "    - Start:   sudo systemctl start wfh-monitoring-agent"
+echo "    - Stop:    sudo systemctl stop wfh-monitoring-agent"
+echo "    - Status:  sudo systemctl status wfh-monitoring-agent"
+echo "    - Logs:    sudo journalctl -u wfh-monitoring-agent -f"
+echo "    - Disable: sudo systemctl disable wfh-monitoring-agent"
+echo
+echo "Service will auto-start on boot and restart if it crashes."
+echo "Logs will be available via journalctl."
+echo
+read -p "Press Enter to continue..."
 """
+                zip_file.writestr('wfh-monitoring-agent.service', systemd_service)
                 zip_file.writestr('install.sh', linux_script)
 
             zip_file.writestr('README.txt', instructions)
