@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
@@ -27,18 +26,13 @@ interface LogEntry {
   screenshot_path: string | null;
 }
 
-interface WorkingHoursData {
-  username: string;
-  date: string;
-  total_hours: number;
-  first_seen: string | null;
-  last_seen: string | null;
-}
-
-interface ModalData {
-  type: 'logs' | 'hours' | null;
-  employee: string;
-  data: LogEntry[] | WorkingHoursData | null;
+interface ViewState {
+  currentView: 'list' | 'employee-detail';
+  selectedEmployee: string | null;
+  employeeData: {
+    logs: LogEntry[];
+    stats: any;
+  } | null;
 }
 
 interface DashboardStats {
@@ -56,7 +50,11 @@ const EmployeesSection: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
-  const [modalData, setModalData] = useState<ModalData>({ type: null, employee: '', data: null });
+  const [viewState, setViewState] = useState<ViewState>({
+    currentView: 'list',
+    selectedEmployee: null,
+    employeeData: null
+  });
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -103,44 +101,40 @@ const EmployeesSection: React.FC = () => {
     setFilteredEmployees(filtered);
   };
 
-  const viewEmployeeLogs = async (username: string) => {
+  const viewEmployeeDetail = async (username: string) => {
     setLoading(true);
     try {
       const response = await axios.get(`/api/admin/employees/${username}/logs?days=7`);
-      const logs = response.data.logs || [];
-      setModalData({ type: 'logs', employee: username, data: logs });
+      const employee = employees.find(emp => emp.username === username);
+      
+      setViewState({
+        currentView: 'employee-detail',
+        selectedEmployee: username,
+        employeeData: {
+          logs: response.data.logs || [],
+          stats: employee || {}
+        }
+      });
     } catch (error) {
-      console.error('Error loading logs:', error);
-      setModalData({ type: 'logs', employee: username, data: [] });
+      console.error('Error loading employee details:', error);
+      setViewState({
+        currentView: 'employee-detail',
+        selectedEmployee: username,
+        employeeData: {
+          logs: [],
+          stats: employees.find(emp => emp.username === username) || {}
+        }
+      });
     }
     setLoading(false);
   };
 
-  const viewWorkingHours = async (username: string) => {
-    setLoading(true);
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      const response = await axios.get(`/api/admin/employees/${username}/working-hours?date=${today}`);
-      const data = response.data;
-      setModalData({ type: 'hours', employee: username, data: data });
-    } catch (error) {
-      console.error('Error loading working hours:', error);
-      setModalData({ type: 'hours', employee: username, data: null });
-    }
-    setLoading(false);
-  };
-
-  const closeModal = () => {
-    setModalData({ type: null, employee: '', data: null });
-  };
-
-  const formatLocation = (locationStr: string) => {
-    try {
-      const location = JSON.parse(locationStr);
-      return `${location.city || 'Unknown'}, ${location.region || 'Unknown'}, ${location.country || 'Unknown'}`;
-    } catch {
-      return locationStr || 'Unknown';
-    }
+  const backToList = () => {
+    setViewState({
+      currentView: 'list',
+      selectedEmployee: null,
+      employeeData: null
+    });
   };
 
   const CircularProgress: React.FC<{ percentage: number; label: string; }> = ({ percentage, label }) => {
@@ -240,255 +234,274 @@ const EmployeesSection: React.FC = () => {
     );
   };
 
-  const renderModal = () => {
-    if (!modalData.type) return null;
+  const renderEmployeeDetail = () => {
+    if (viewState.currentView !== 'employee-detail' || !viewState.employeeData) return null;
+
+    const { logs, stats } = viewState.employeeData;
 
     return (
-      <div className="modal-overlay" onClick={closeModal}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>
-              {modalData.type === 'logs' ? '📋 Employee Logs' : '⏰ Working Hours'}
-              {' - '}
-              <span className="employee-name">{modalData.employee}</span>
-            </h3>
-            <button className="modal-close" onClick={closeModal}>×</button>
+      <div className="employee-detail-page">
+        <div className="employee-detail-header">
+          <h1 className="employee-detail-title">
+            👤 {viewState.selectedEmployee} - Employee Details
+          </h1>
+          <button className="back-btn" onClick={backToList}>
+            ← Back to List
+          </button>
+        </div>
+
+        <div className="employee-detail-content">
+          {/* Employee Stats Grid */}
+          <div className="employee-stats-grid">
+            <div className="stat-card">
+              <h4>Status</h4>
+              <p className="stat-value" style={{ color: stats.status === 'online' ? '#28a745' : '#dc3545' }}>
+                {stats.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+              </p>
+            </div>
+            <div className="stat-card">
+              <h4>Working Hours</h4>
+              <p className="stat-value">{stats.working_hours || '0h 0m'}</p>
+            </div>
+            <div className="stat-card">
+              <h4>Productivity</h4>
+              <p className="stat-value">{stats.productivity || '0%'}</p>
+            </div>
+            <div className="stat-card">
+              <h4>Work Location</h4>
+              <p className="stat-value" style={{ 
+                color: stats.location === 'Office Bangalore' ? '#007bff' : '#28a745'
+              }}>
+                {stats.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote'}
+              </p>
+            </div>
+            <div className="stat-card">
+              <h4>Public IP</h4>
+              <p className="stat-value" style={{ fontSize: '16px' }}>{stats.public_ip || 'Unknown'}</p>
+            </div>
+            <div className="stat-card">
+              <h4>Last Seen</h4>
+              <p className="stat-value" style={{ fontSize: '16px' }}>
+                {stats.last_seen ? new Date(stats.last_seen).toLocaleString() : 'Unknown'}
+              </p>
+            </div>
           </div>
-          
-          <div className="modal-body">
-            {loading ? (
-              <div className="loading-spinner">Loading...</div>
-            ) : modalData.type === 'logs' ? (
-              <div className="logs-content">
-                <div className="logs-summary">
-                  <strong>Last 7 days • {Array.isArray(modalData.data) ? modalData.data.length : 0} logs found</strong>
-                </div>
-                {Array.isArray(modalData.data) && modalData.data.length > 0 ? (
-                  <div className="logs-list">
-                    {modalData.data.map((log: LogEntry, index: number) => (
-                      <div key={index} className="log-entry">
-                        <div className="log-header">
-                          <span className="log-date">
-                            📅 {new Date(log.timestamp).toLocaleString()}
-                          </span>
-                          {log.screenshot_path && (
-                            <span className="screenshot-badge">📸 Screenshot</span>
-                          )}
-                        </div>
-                        <div className="log-details">
-                          <div className="log-row">
-                            <span className="log-label">🖥️ Hostname:</span>
-                            <span>{log.hostname}</span>
-                          </div>
-                          <div className="log-row">
-                            <span className="log-label">🌐 Local IP:</span>
-                            <span>{log.local_ip}</span>
-                          </div>
-                          <div className="log-row">
-                            <span className="log-label">🌍 Public IP:</span>
-                            <span>{log.public_ip}</span>
-                          </div>
-                          <div className="log-row">
-                            <span className="log-label">📍 Location:</span>
-                            <span>{formatLocation(log.location)}</span>
-                          </div>
-                        </div>
+
+          {/* Activity Logs and Screenshots */}
+          <div className="logs-section">
+            <div className="logs-header">
+              <h3>📊 Activity Logs & Screenshots ({logs.length} entries)</h3>
+            </div>
+            <div className="logs-content">
+              {logs.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#666', padding: '40px' }}>
+                  No activity logs available for this employee.
+                </p>
+              ) : (
+                logs.map((log, index) => (
+                  <div key={index} className="log-entry">
+                    <div className="log-details">
+                      <div className="log-detail-item">
+                        <span className="log-detail-label">📅 Timestamp:</span>
+                        <span className="log-detail-value">
+                          {new Date(log.timestamp).toLocaleString()}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="no-data">No logs found for the selected period.</div>
-                )}
-              </div>
-            ) : (
-              <div className="hours-content">
-                {modalData.data ? (
-                  <div className="hours-summary">
-                    <div className="hours-card">
-                      <div className="hours-main">
-                        <div className="hours-number">
-                          {(modalData.data as WorkingHoursData).total_hours}
-                          <span className="hours-unit">hours</span>
-                        </div>
-                        <div className="hours-date">
-                          {new Date((modalData.data as WorkingHoursData).date).toLocaleDateString()}
-                        </div>
+                      <div className="log-detail-item">
+                        <span className="log-detail-label">💻 Hostname:</span>
+                        <span className="log-detail-value">{log.hostname}</span>
                       </div>
-                      
-                      {(modalData.data as WorkingHoursData).first_seen && (modalData.data as WorkingHoursData).last_seen ? (
-                        <div className="hours-timeline">
-                          <div className="timeline-item">
-                            <span className="timeline-label">🌅 First Activity:</span>
-                            <span className="timeline-time">
-                              {new Date((modalData.data as WorkingHoursData).first_seen!).toLocaleTimeString()}
-                            </span>
+                      <div className="log-detail-item">
+                        <span className="log-detail-label">🔗 Local IP:</span>
+                        <span className="log-detail-value">{log.local_ip}</span>
+                      </div>
+                      <div className="log-detail-item">
+                        <span className="log-detail-label">🌐 Public IP:</span>
+                        <span className="log-detail-value">{log.public_ip}</span>
+                      </div>
+                      <div className="log-detail-item">
+                        <span className="log-detail-label">📍 Location:</span>
+                        <span className="log-detail-value">
+                          {log.public_ip === '14.96.131.106' ? '🏢 Office Bangalore' : '🏠 Remote Work'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="screenshot-container">
+                      {log.screenshot_path ? (
+                        <>
+                          <img 
+                            src={`/api/screenshots/${log.screenshot_path.split('/').pop()}`}
+                            alt="Employee Screenshot"
+                            className="screenshot-preview"
+                            onClick={() => window.open(`/api/screenshots/${log.screenshot_path.split('/').pop()}`, '_blank')}
+                          />
+                          <div className="screenshot-label">
+                            Click to view full size
                           </div>
-                          <div className="timeline-item">
-                            <span className="timeline-label">🌅 Last Activity:</span>
-                            <span className="timeline-time">
-                              {new Date((modalData.data as WorkingHoursData).last_seen!).toLocaleTimeString()}
-                            </span>
-                          </div>
-                          
-                          <div className="progress-bar">
-                            <div className="progress-label">Daily Progress</div>
-                            <div className="progress-container">
-                              <div 
-                                className="progress-fill" 
-                                style={{ 
-                                  width: `${Math.min(((modalData.data as WorkingHoursData).total_hours / 8) * 100, 100)}%`,
-                                  backgroundColor: (modalData.data as WorkingHoursData).total_hours >= 8 ? '#28a745' : 
-                                                   (modalData.data as WorkingHoursData).total_hours >= 6 ? '#ffc107' : '#dc3545'
-                                }}
-                              ></div>
-                              <span className="progress-text">
-                                {(modalData.data as WorkingHoursData).total_hours}h / 8h
-                              </span>
-                            </div>
-                          </div>
-                        </div>
+                        </>
                       ) : (
-                        <div className="no-activity">No activity recorded for today</div>
+                        <div style={{ 
+                          width: '100%', 
+                          height: '200px', 
+                          background: '#f8f9fa',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: '8px',
+                          color: '#666'
+                        }}>
+                          📷 No screenshot available
+                        </div>
                       )}
                     </div>
                   </div>
-                ) : (
-                  <div className="no-data">Error loading working hours data.</div>
-                )}
-              </div>
-            )}
+                ))
+              )}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
-  return (
-    <div>
-      {/* Dashboard Charts */}
-      {dashboardStats && (
-        <div className="dashboard-charts" style={{ marginBottom: '30px' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: '60px', flexWrap: 'wrap' }}>
-            <CircularProgress 
-              percentage={dashboardStats.remote_productivity} 
-              label="Remote"
-            />
-            <CircularProgress 
-              percentage={dashboardStats.office_productivity} 
-              label="Office"
-            />
+  const renderEmployeeList = () => {
+    return (
+      <div>
+        {/* Dashboard Charts */}
+        {dashboardStats && (
+          <div className="dashboard-charts" style={{ marginBottom: '30px' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '60px', flexWrap: 'wrap' }}>
+              <CircularProgress 
+                percentage={dashboardStats.remote_productivity} 
+                label="Remote"
+              />
+              <CircularProgress 
+                percentage={dashboardStats.office_productivity} 
+                label="Office"
+              />
+            </div>
+            <div className="dashboard-summary" style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: 'rgba(255,255,255,0.9)' }}>
+              <span style={{ marginRight: '30px' }}>
+                🏠 Remote: {dashboardStats.remote_count} employees
+              </span>
+              <span>
+                🏢 Office: {dashboardStats.office_count} employees
+              </span>
+            </div>
           </div>
-          <div className="dashboard-summary" style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: '#666' }}>
-            <span style={{ marginRight: '30px' }}>
-              🏠 Remote: {dashboardStats.remote_count} employees
-            </span>
-            <span>
-              🏢 Office: {dashboardStats.office_count} employees
-            </span>
+        )}
+
+        <div className="employee-table-container">
+          <div className="employee-header">
+            <h3>Employee Management</h3>
+            <button className="refresh-btn" onClick={loadEmployees}>
+              🔄 Refresh
+            </button>
           </div>
-        </div>
-      )}
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h3>Employee Management</h3>
-        <button className="btn btn-success" onClick={loadEmployees}>
-          🔄 Refresh
-        </button>
+          <div className="search-filter-bar">
+            <div className="search-box">
+              <input
+                type="text"
+                placeholder="Search employees by name or hostname..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="filter-select">
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                <option value="">All Status</option>
+                <option value="online">Online</option>
+                <option value="offline">Offline</option>
+              </select>
+            </div>
+            <div className="filter-select">
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="id">Sort by ID</option>
+                <option value="name">Sort by Name</option>
+                <option value="hours">Sort by Working Hours</option>
+                <option value="productivity">Sort by Productivity</option>
+              </select>
+            </div>
+          </div>
+
+          {filteredEmployees.length > 0 ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>User Name</th>
+                  <th>Start time</th>
+                  <th>End Time</th>
+                  <th>Working Hrs</th>
+                  <th>Productivity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredEmployees.map((emp) => (
+                  <tr key={emp.id} 
+                      onClick={() => viewEmployeeDetail(emp.username)}
+                      style={{ 
+                        cursor: 'pointer',
+                        backgroundColor: emp.status === 'online' ? '#f8f9fa' : '#fff'
+                      }}
+                      className="employee-row"
+                  >
+                    <td><strong>{emp.id}</strong></td>
+                    <td>
+                      <strong>{emp.username}</strong>
+                      <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                        {emp.status === 'online' ? '🟢 Online' : '🔴 Offline'} • {emp.public_ip}
+                      </div>
+                      <div style={{ 
+                        fontSize: '10px', 
+                        color: emp.location === 'Office Bangalore' ? '#007bff' : '#28a745',
+                        fontWeight: '500'
+                      }}>
+                        {emp.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote work'}
+                      </div>
+                    </td>
+                    <td>
+                      <span className={emp.start_time !== '--:--' ? 'time-active' : 'time-inactive'}>
+                        {emp.start_time}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={emp.end_time !== '--:--' ? 'time-active' : 'time-inactive'}>
+                        {emp.end_time}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={emp.raw_hours > 0 ? 'hours-active' : 'hours-inactive'}>
+                        {emp.working_hours}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`productivity-${emp.raw_productivity >= 80 ? 'high' : emp.raw_productivity >= 60 ? 'medium' : 'low'}`}>
+                        {emp.productivity}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <div style={{ padding: '40px', textAlign: 'center', color: '#666' }}>
+              No employees found
+            </div>
+          )}
+        </div>
       </div>
+    );
+  };
 
-      <div className="search-filter-bar">
-        <div className="search-box">
-          <input
-            type="text"
-            placeholder="Search employees by name or hostname..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="filter-select">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option value="">All Status</option>
-            <option value="online">Online</option>
-            <option value="offline">Offline</option>
-          </select>
-        </div>
-        <div className="filter-select">
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
-            <option value="id">Sort by ID</option>
-            <option value="name">Sort by Name</option>
-            <option value="hours">Sort by Working Hours</option>
-            <option value="productivity">Sort by Productivity</option>
-          </select>
-        </div>
-      </div>
+  // Main return statement
+  if (viewState.currentView === 'employee-detail') {
+    return renderEmployeeDetail();
+  }
 
-      {filteredEmployees.length > 0 ? (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>User Name</th>
-              <th>Start time</th>
-              <th>End Time</th>
-              <th>Working Hrs</th>
-              <th>Productivity</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredEmployees.map((emp) => (
-              <tr key={emp.id} 
-                  onClick={() => viewEmployeeLogs(emp.username)}
-                  style={{ 
-                    cursor: 'pointer',
-                    backgroundColor: emp.status === 'online' ? '#f8f9fa' : '#fff'
-                  }}
-                  className="employee-row"
-              >
-                <td><strong>{emp.id}</strong></td>
-                <td>
-                  <strong>{emp.username}</strong>
-                  <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
-                    {emp.status === 'online' ? '🟢 Online' : '🔴 Offline'} • {emp.public_ip}
-                  </div>
-                  <div style={{ 
-                    fontSize: '10px', 
-                    color: emp.location === 'Office Bangalore' ? '#007bff' : '#28a745',
-                    fontWeight: '500'
-                  }}>
-                    {emp.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote work'}
-                  </div>
-                </td>
-                <td>
-                  <span className={emp.start_time !== '--:--' ? 'time-active' : 'time-inactive'}>
-                    {emp.start_time}
-                  </span>
-                </td>
-                <td>
-                  <span className={emp.end_time !== '--:--' ? 'time-active' : 'time-inactive'}>
-                    {emp.end_time}
-                  </span>
-                </td>
-                <td>
-                  <span className={emp.raw_hours > 0 ? 'hours-active' : 'hours-inactive'}>
-                    {emp.working_hours}
-                  </span>
-                </td>
-                <td>
-                  <span className={`productivity-${emp.raw_productivity >= 80 ? 'high' : emp.raw_productivity >= 60 ? 'medium' : 'low'}`}>
-                    {emp.productivity}
-                  </span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      ) : (
-        <p>No employees found</p>
-      )}
-      
-      {renderModal()}
-    </div>
-  );
+  return renderEmployeeList();
 };
 
 export default EmployeesSection;
