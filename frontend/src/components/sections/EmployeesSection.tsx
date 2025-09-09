@@ -41,9 +41,18 @@ interface ModalData {
   data: LogEntry[] | WorkingHoursData | null;
 }
 
+interface DashboardStats {
+  total_employees: number;
+  office_count: number;
+  remote_count: number;
+  office_productivity: number;
+  remote_productivity: number;
+}
+
 const EmployeesSection: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortBy, setSortBy] = useState('name');
@@ -62,6 +71,7 @@ const EmployeesSection: React.FC = () => {
     try {
       const response = await axios.get('/api/admin/employees/enhanced');
       setEmployees(response.data.employees || []);
+      setDashboardStats(response.data.dashboard_stats || null);
     } catch (error) {
       console.error('Failed to load employees:', error);
     }
@@ -131,6 +141,103 @@ const EmployeesSection: React.FC = () => {
     } catch {
       return locationStr || 'Unknown';
     }
+  };
+
+  const CircularProgress: React.FC<{ percentage: number; label: string; }> = ({ percentage, label }) => {
+    const circumference = 2 * Math.PI * 45; // radius = 45
+    const strokeDasharray = circumference;
+    const strokeDashoffset = circumference - (percentage / 100) * circumference;
+    
+    return (
+      <div className="circular-progress-container">
+        <svg width="120" height="120" className="circular-progress">
+          {/* Background circle */}
+          <circle
+            cx="60"
+            cy="60"
+            r="45"
+            stroke="#f0f0f0"
+            strokeWidth="8"
+            fill="transparent"
+          />
+          
+          {/* Working time circle (pink) */}
+          <circle
+            cx="60"
+            cy="60"
+            r="45"
+            stroke="#ff9999"
+            strokeWidth="8"
+            fill="transparent"
+            strokeDasharray={strokeDasharray}
+            strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round"
+            transform="rotate(-90 60 60)"
+            className="progress-circle"
+          />
+          
+          {/* Productive time circle (purple) */}
+          <circle
+            cx="60"
+            cy="60"
+            r="35"
+            stroke="#9966ff"
+            strokeWidth="6"
+            fill="transparent"
+            strokeDasharray={2 * Math.PI * 35}
+            strokeDashoffset={2 * Math.PI * 35 - (percentage * 0.8 / 100) * 2 * Math.PI * 35}
+            strokeLinecap="round"
+            transform="rotate(-90 60 60)"
+            className="progress-circle"
+          />
+          
+          {/* Computer activity circle (mint) */}
+          <circle
+            cx="60"
+            cy="60"
+            r="25"
+            stroke="#66ffcc"
+            strokeWidth="4"
+            fill="transparent"
+            strokeDasharray={2 * Math.PI * 25}
+            strokeDashoffset={2 * Math.PI * 25 - (percentage * 0.9 / 100) * 2 * Math.PI * 25}
+            strokeLinecap="round"
+            transform="rotate(-90 60 60)"
+            className="progress-circle"
+          />
+          
+          {/* Center text */}
+          <text
+            x="60"
+            y="65"
+            textAnchor="middle"
+            className="progress-percentage"
+            fontSize="18"
+            fontWeight="bold"
+            fill="#333"
+          >
+            {percentage}%
+          </text>
+        </svg>
+        
+        <h3 className="progress-label">{label}</h3>
+        
+        <div className="progress-legend">
+          <div className="legend-item">
+            <span className="legend-color" style={{backgroundColor: '#ff9999'}}></span>
+            <span className="legend-text">Working time</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color" style={{backgroundColor: '#9966ff'}}></span>
+            <span className="legend-text">Productive Time</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-color" style={{backgroundColor: '#66ffcc'}}></span>
+            <span className="legend-text">Computer Activity</span>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   const renderModal = () => {
@@ -258,6 +365,30 @@ const EmployeesSection: React.FC = () => {
 
   return (
     <div>
+      {/* Dashboard Charts */}
+      {dashboardStats && (
+        <div className="dashboard-charts" style={{ marginBottom: '30px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '60px', flexWrap: 'wrap' }}>
+            <CircularProgress 
+              percentage={dashboardStats.remote_productivity} 
+              label="Remote"
+            />
+            <CircularProgress 
+              percentage={dashboardStats.office_productivity} 
+              label="Office"
+            />
+          </div>
+          <div className="dashboard-summary" style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: '#666' }}>
+            <span style={{ marginRight: '30px' }}>
+              🏠 Remote: {dashboardStats.remote_count} employees
+            </span>
+            <span>
+              🏢 Office: {dashboardStats.office_count} employees
+            </span>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <h3>Employee Management</h3>
         <button className="btn btn-success" onClick={loadEmployees}>
