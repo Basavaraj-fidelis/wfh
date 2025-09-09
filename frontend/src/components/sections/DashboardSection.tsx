@@ -17,13 +17,15 @@ const DashboardSection: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { logout } = useAuth();
+  const { logout, isAuthenticated, isInitialized } = useAuth();
 
   useEffect(() => {
-    loadDashboardData();
-    const interval = setInterval(loadDashboardData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isInitialized && isAuthenticated) {
+      loadDashboardData();
+      const interval = setInterval(loadDashboardData, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [isInitialized, isAuthenticated]);
 
   const loadDashboardData = async () => {
     try {

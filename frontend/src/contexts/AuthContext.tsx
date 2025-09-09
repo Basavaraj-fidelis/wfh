@@ -7,6 +7,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
+  isInitialized: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -24,7 +25,8 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('adminToken'));
+  const [token, setToken] = useState<string | null>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // Check if token is expired
   const isTokenValid = (token: string): boolean => {
@@ -64,6 +66,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAuthenticated = !!token && isTokenValid(token);
 
+  // Initialize token from localStorage
+  React.useEffect(() => {
+    const savedToken = localStorage.getItem('adminToken');
+    if (savedToken && isTokenValid(savedToken)) {
+      setToken(savedToken);
+    } else if (savedToken) {
+      localStorage.removeItem('adminToken');
+    }
+    setIsInitialized(true);
+  }, []);
+
   // Auto-logout if token is expired
   React.useEffect(() => {
     if (token && !isTokenValid(token)) {
@@ -100,7 +113,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [token]);
 
   return (
-    <AuthContext.Provider value={{ token, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ token, login, logout, isAuthenticated, isInitialized }}>
       {children}
     </AuthContext.Provider>
   );
