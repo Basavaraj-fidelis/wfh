@@ -370,24 +370,46 @@ const EmployeesSection: React.FC = () => {
       <div>
         {/* Dashboard Charts */}
         {dashboardStats && (
-          <div className="dashboard-charts" style={{ marginBottom: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '60px', flexWrap: 'wrap' }}>
-              <CircularProgress 
-                percentage={dashboardStats.remote_productivity} 
-                label="Remote"
-              />
-              <CircularProgress 
-                percentage={dashboardStats.office_productivity} 
-                label="Office"
-              />
+          <div className="dashboard-charts-new">
+            <div className="charts-container">
+              <div className="chart-card">
+                <div className="chart-wrapper">
+                  <CircularProgress 
+                    percentage={dashboardStats.remote_productivity} 
+                    label="Remote"
+                  />
+                </div>
+                <div className="employee-count">
+                  🏠 Remote: {dashboardStats.remote_count} employees
+                </div>
+              </div>
+              
+              <div className="chart-card">
+                <div className="chart-wrapper">
+                  <CircularProgress 
+                    percentage={dashboardStats.office_productivity} 
+                    label="Office"
+                  />
+                </div>
+                <div className="employee-count">
+                  🏢 Office: {dashboardStats.office_count} employees
+                </div>
+              </div>
             </div>
-            <div className="dashboard-summary" style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: 'rgba(255,255,255,0.9)' }}>
-              <span style={{ marginRight: '30px' }}>
-                🏠 Remote: {dashboardStats.remote_count} employees
-              </span>
-              <span>
-                🏢 Office: {dashboardStats.office_count} employees
-              </span>
+            
+            <div className="legend-panel">
+              <div className="legend-item-new">
+                <span className="legend-dot" style={{backgroundColor: '#ff9999'}}></span>
+                <span>Working time</span>
+              </div>
+              <div className="legend-item-new">
+                <span className="legend-dot" style={{backgroundColor: '#9966ff'}}></span>
+                <span>Productive Time</span>
+              </div>
+              <div className="legend-item-new">
+                <span className="legend-dot" style={{backgroundColor: '#66ffcc'}}></span>
+                <span>Computer Activity</span>
+              </div>
             </div>
           </div>
         )}

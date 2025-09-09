@@ -197,21 +197,49 @@
   font-weight: 500;
 }
 
-.dashboard-charts {
+/* New Dashboard Design */
+.dashboard-charts-new {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   padding: 40px;
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   margin-bottom: 30px;
-  color: white;
+  display: flex;
+  align-items: center;
+  gap: 40px;
+}
+
+.charts-container {
+  display: flex;
+  gap: 40px;
+  flex: 1;
+}
+
+.chart-card {
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 20px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-height: 280px;
+  justify-content: space-between;
+}
+
+.chart-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .circular-progress-container {
-  background: rgba(255,255,255,0.1);
-  backdrop-filter: blur(10px);
-  padding: 25px;
-  border-radius: 15px;
-  border: 1px solid rgba(255,255,255,0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
 }
 
 .progress-percentage {
@@ -222,12 +250,50 @@
 .progress-label {
   color: white !important;
   font-weight: 700;
+  font-size: 24px !important;
   text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 0 !important;
 }
 
-.legend-item {
-  color: rgba(255,255,255,0.9) !important;
+.employee-count {
+  color: rgba(255,255,255,0.9);
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 20px;
+  text-align: center;
+}
+
+.legend-panel {
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 15px;
+  padding: 25px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 200px;
+}
+
+.legend-item-new {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: rgba(255,255,255,0.9);
+  font-size: 14px;
   font-weight: 500;
+}
+
+.legend-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Hide old legend inside circular progress */
+.progress-legend {
+  display: none;
 }
 
 /* Full Page Employee View */
