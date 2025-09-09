@@ -83,4 +83,5 @@ packages = ["cargo", "libiconv", "libxcrypt", "rustc"]
 
 [deployment]
 deploymentTarget = "vm"
-run = ["python", "server/main.py"]
+run = ["bash", "-c", "cd server && python main.py & cd frontend && npm run dev"]
+build = ["cd frontend", "npm run build"]
