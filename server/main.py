@@ -598,6 +598,256 @@ def get_range_report(
         "employees": employee_data
     }
 
+# Test endpoint for debugging
+@app.get("/api/download/test")
+def test_download():
+    return {"message": "Download endpoint works"}
+
+# Agent download endpoints
+@app.get("/api/download/agent/{platform}")
+def download_agent(platform: str, admin=Depends(verify_admin_token)):
+    """Download agent installer for specified platform"""
+    import zipfile
+    import io
+
+    if platform not in ['windows', 'mac', 'linux']:
+        raise HTTPException(status_code=400, detail="Invalid platform")
+
+    # Create agent installer package in memory
+    zip_buffer = io.BytesIO()
+
+    try:
+        # Read agent file content
+        agent_paths = ['../agent/agent.py', 'agent/agent.py', './agent/agent.py']
+        agent_content = None
+
+        for path in agent_paths:
+            try:
+                with open(path, 'r') as f:
+                    agent_content = f.read()
+                break
+            except FileNotFoundError:
+                continue
+
+        if not agent_content:
+            # Create a basic agent if file not found
+            agent_content = '''#!/usr/bin/env python3
+"""
+WFH Employee Monitoring Agent
+Basic version - Update SERVER_URL and AUTH_TOKEN before use
+"""
+
+import requests
+import time
+import socket
+import getpass
+from datetime import datetime
+
+SERVER_URL = "https://your-repl-url.replit.app"
+AUTH_TOKEN = "agent-secret-token-change-this-in-production"
+
+def send_heartbeat():
+    data = {
+        "username": getpass.getuser(),
+        "hostname": socket.gethostname(),
+        "status": "online"
+    }
+
+    try:
+        response = requests.post(
+            f"{SERVER_URL}/api/heartbeat",
+            json=data,
+            headers={'Authorization': f'Bearer {AUTH_TOKEN}'},
+            timeout=30
+        )
+        print(f"Heartbeat: {response.status_code}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+if __name__ == "__main__":
+    print("Starting WFH Monitoring Agent...")
+    while True:
+        send_heartbeat()
+        time.sleep(300)  # 5 minutes
+'''
+
+        # Update server URL in agent content with current deployment URL
+        repl_id = os.getenv("REPL_ID", "")
+        repl_slug = os.getenv("REPL_SLUG", "")
+
+        # Try to get the current server URL from the request
+        current_url = "https://e1cdd19c-fdf6-4b9f-94bf-b122742d048e-00-2ltrq5fmw548e.riker.replit.dev"
+
+        # Replace the placeholder URL with the actual server URL
+        agent_content = agent_content.replace(
+            'SERVER_URL = "https://your-repl-name.replit.app"',
+            f'SERVER_URL = "{current_url}"'
+        )
+
+        # Create requirements file content
+        requirements_content = """requests==2.31.0
+pillow==10.0.1
+schedule==1.2.0
+psutil==5.9.5
+"""
+
+        # Create zip file with agent and requirements
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            # Add agent file
+            zip_file.writestr('agent.py', agent_content)
+            
+            # Add requirements file
+            zip_file.writestr('agent_requirements.txt', requirements_content)
+
+            # Platform specific instructions and installers
+            if platform == 'windows':
+                instructions = f"""
+WFH Monitoring Agent - Windows Installation
+
+1. Install Python 3.7+ from python.org
+2. Extract this ZIP file to a folder (e.g., C:\\wfh-agent\\)
+3. Open Command Prompt as Administrator
+4. Navigate to the folder: cd C:\\wfh-agent
+5. Install requirements: pip install -r agent_requirements.txt
+6. Run the agent: python agent.py
+7. To run as service: python service_wrapper.py install
+8. Start service: net start "WFH Monitoring Agent"
+
+Configuration:
+- Server URL: {current_url}
+- Agent Token: agent-secret-token-change-this-in-production
+
+For automatic startup, add to Windows startup folder or Task Scheduler.
+"""
+                
+                # Windows service wrapper
+                service_wrapper = '''import sys
+import servicemanager
+import win32service
+import win32serviceutil
+import subprocess
+
+class WFHAgentService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "WFHMonitoringAgent"
+    _svc_display_name_ = "WFH Monitoring Agent"
+    
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        
+    def SvcDoRun(self):
+        subprocess.call([sys.executable, "agent.py"])
+        
+    def SvcStop(self):
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+
+if __name__ == '__main__':
+    win32serviceutil.HandleCommandLine(WFHAgentService)
+'''
+                zip_file.writestr('service_wrapper.py', service_wrapper)
+                
+                # Windows batch installer
+                batch_installer = '''@echo off
+echo Installing WFH Monitoring Agent for Windows...
+echo.
+
+echo Step 1: Installing Python dependencies...
+pip install -r agent_requirements.txt
+
+echo.
+echo Step 2: Agent ready to run...
+echo Run: python agent.py
+echo To install as service: python service_wrapper.py install
+pause
+'''
+                zip_file.writestr('install.bat', batch_installer)
+
+            elif platform == 'mac':
+                instructions = f"""
+WFH Monitoring Agent - macOS Installation
+
+1. Ensure Python 3.7+ is installed (check: python3 --version)
+2. Extract this ZIP file to a folder (e.g., ~/wfh-agent/)
+3. Open Terminal
+4. Navigate to the folder: cd ~/wfh-agent
+5. Install requirements: pip3 install -r agent_requirements.txt
+6. Run the agent: python3 agent.py
+7. For startup: Add to ~/.zshrc or create LaunchAgent
+
+Configuration:
+- Server URL: {current_url}
+- Agent Token: agent-secret-token-change-this-in-production
+
+### macOS Setup:
+- May need to install python3 via Homebrew: brew install python
+- For auto-startup: Create ~/Library/LaunchAgents/com.wfh.agent.plist
+- Grant necessary permissions in System Preferences > Security & Privacy
+"""
+
+                # macOS installation script
+                mac_script = '''#!/bin/bash
+echo "Installing WFH Monitoring Agent for macOS..."
+echo
+
+echo "Step 1: Installing Python dependencies..."
+pip3 install -r agent_requirements.txt
+
+echo
+echo "Step 2: Agent ready to run..."
+echo "Run: python3 agent.py"
+echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
+'''
+                zip_file.writestr('install.sh', mac_script)
+
+            else:  # linux
+                instructions = f"""
+WFH Monitoring Agent - Linux Installation
+
+1. Ensure Python 3.7+ is installed (check: python3 --version)
+2. Extract this ZIP file to a folder (e.g., /opt/wfh-agent/)
+3. Open terminal
+4. Navigate to the folder: cd /opt/wfh-agent
+5. Install requirements: pip3 install -r agent_requirements.txt
+6. Run the agent: python3 agent.py
+7. For service: Create systemd service file
+
+Configuration:
+- Server URL: {current_url}
+- Agent Token: agent-secret-token-change-this-in-production
+
+### Linux Setup:
+- Install python3-pip if not available: sudo apt install python3-pip
+- For startup: Create systemd service or add to ~/.profile
+- May need to install python3-tk for screenshot functionality
+"""
+
+                # Linux installation script
+                linux_script = """#!/bin/bash
+echo "Installing WFH Monitoring Agent for Linux..."
+echo
+
+echo "Step 1: Installing Python dependencies..."
+pip3 install -r agent_requirements.txt
+
+echo
+echo "Step 2: Agent ready to run..."
+echo "Run: python3 agent.py"
+echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
+"""
+                zip_file.writestr('install.sh', linux_script)
+
+            zip_file.writestr('README.txt', instructions)
+
+        zip_buffer.seek(0)
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.read()),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename=wfh-agent-{platform}.zip"}
+        )
+
+    except Exception as e:
+        print(f"Error creating agent package: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create agent package: {str(e)}")
+
 # Admin dashboard - serve React app
 @app.get("/", response_class=HTMLResponse)
 def dashboard():
@@ -644,7 +894,7 @@ def dashboard():
 @app.get("/{full_path:path}", response_class=HTMLResponse)
 def catch_all(full_path: str):
     # Don't interfere with API routes
-    if full_path.startswith('api/') or full_path.startswith('download/'):
+    if full_path.startswith('api/'):
         raise HTTPException(status_code=404, detail="Not found")
     
     try:
@@ -2140,6 +2390,11 @@ def legacy_dashboard():
     </body>
     </html>
     """
+
+# Test endpoint for debugging
+@app.get("/api/download/test")
+def test_download():
+    return {"message": "Download endpoint works"}
 
 # Agent download endpoints
 @app.get("/api/download/agent/{platform}")
