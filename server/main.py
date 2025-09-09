@@ -720,43 +720,140 @@ Configuration:
 For automatic startup, add to Windows startup folder or Task Scheduler.
 """
                 
-                # Windows service wrapper
+                # Enhanced Windows service wrapper
                 service_wrapper = '''import sys
-import servicemanager
-import win32service
-import win32serviceutil
+import os
+import time
+import logging
 import subprocess
+import threading
+try:
+    import servicemanager
+    import win32service
+    import win32serviceutil
+    import win32event
+except ImportError:
+    print("Error: pywin32 package required for Windows service")
+    print("Install with: pip install pywin32")
+    sys.exit(1)
 
 class WFHAgentService(win32serviceutil.ServiceFramework):
     _svc_name_ = "WFHMonitoringAgent"
     _svc_display_name_ = "WFH Monitoring Agent"
+    _svc_description_ = "Employee monitoring agent for Work From Home tracking"
     
     def __init__(self, args):
         win32serviceutil.ServiceFramework.__init__(self, args)
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        self.process = None
         
-    def SvcDoRun(self):
-        subprocess.call([sys.executable, "agent.py"])
+        # Setup logging
+        logging.basicConfig(
+            filename=os.path.join(os.path.dirname(__file__), 'service.log'),
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
         
     def SvcStop(self):
         self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        logging.info("Service stop requested")
+        
+        if self.process:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=10)
+            except:
+                self.process.kill()
+        
+        win32event.SetEvent(self.hWaitStop)
+        
+    def SvcDoRun(self):
+        logging.info("WFH Monitoring Agent service starting")
+        servicemanager.LogMsg(
+            servicemanager.EVENTLOG_INFORMATION_TYPE,
+            servicemanager.PYS_SERVICE_STARTED,
+            (self._svc_name_, '')
+        )
+        
+        try:
+            self.main()
+        except Exception as e:
+            logging.error(f"Service error: {e}")
+            servicemanager.LogMsg(
+                servicemanager.EVENTLOG_ERROR_TYPE,
+                servicemanager.PYS_SERVICE_STOPPED,
+                (self._svc_name_, str(e))
+            )
+    
+    def main(self):
+        while True:
+            try:
+                # Start agent process
+                agent_path = os.path.join(os.path.dirname(__file__), "agent.py")
+                self.process = subprocess.Popen([sys.executable, agent_path])
+                logging.info(f"Started agent process: {self.process.pid}")
+                
+                # Wait for either service stop or process termination
+                while self.process.poll() is None:
+                    if win32event.WaitForSingleObject(self.hWaitStop, 1000) == win32event.WAIT_OBJECT_0:
+                        logging.info("Service stop event received")
+                        return
+                
+                # Process terminated unexpectedly, restart after delay
+                logging.warning("Agent process terminated unexpectedly, restarting in 10 seconds")
+                if win32event.WaitForSingleObject(self.hWaitStop, 10000) == win32event.WAIT_OBJECT_0:
+                    return
+                    
+            except Exception as e:
+                logging.error(f"Error in service main loop: {e}")
+                time.sleep(30)
 
 if __name__ == '__main__':
-    win32serviceutil.HandleCommandLine(WFHAgentService)
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(WFHAgentService)
+        servicemanager.StartServiceCtrlDispatcher()
+    else:
+        win32serviceutil.HandleCommandLine(WFHAgentService)
 '''
                 zip_file.writestr('service_wrapper.py', service_wrapper)
                 
-                # Windows batch installer
+                # Enhanced Windows batch installer
                 batch_installer = '''@echo off
-echo Installing WFH Monitoring Agent for Windows...
+echo ============================================
+echo WFH Monitoring Agent - Windows Installation
+echo ============================================
 echo.
 
 echo Step 1: Installing Python dependencies...
 pip install -r agent_requirements.txt
+if %errorlevel% neq 0 (
+    echo Error: Failed to install Python dependencies
+    echo Make sure Python and pip are installed and in PATH
+    pause
+    exit /b 1
+)
 
 echo.
-echo Step 2: Agent ready to run...
-echo Run: python agent.py
-echo To install as service: python service_wrapper.py install
+echo Step 2: Installing Windows service dependencies...
+pip install pywin32
+if %errorlevel% neq 0 (
+    echo Warning: Failed to install pywin32 - service mode may not work
+)
+
+echo.
+echo Step 3: Installation complete!
+echo.
+echo Choose your preferred mode:
+echo [1] Manual Mode: python agent.py
+echo [2] Service Mode (Recommended):
+echo     - Install: python service_wrapper.py install
+echo     - Start:   net start "WFH Monitoring Agent"
+echo     - Stop:    net stop "WFH Monitoring Agent"
+echo     - Remove:  python service_wrapper.py remove
+echo.
+echo For service mode, run this installer as Administrator!
+echo.
 pause
 '''
                 zip_file.writestr('install.bat', batch_installer)
