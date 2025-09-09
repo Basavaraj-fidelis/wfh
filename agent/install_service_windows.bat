@@ -3,9 +3,29 @@
 echo Installing WFH Monitoring Agent as Windows Service...
 echo.
 
+echo Checking current directory...
+echo Current directory: %CD%
+if not exist "agent_requirements.txt" (
+    echo Error: agent_requirements.txt not found in current directory
+    echo Please run this script from the agent folder containing agent.py and agent_requirements.txt
+    pause
+    exit /b 1
+)
+
 echo Step 1: Installing Python dependencies...
 pip install -r agent_requirements.txt
+if %ERRORLEVEL% NEQ 0 (
+    echo Error: Failed to install agent requirements
+    pause
+    exit /b 1
+)
+
 pip install pywin32
+if %ERRORLEVEL% NEQ 0 (
+    echo Error: Failed to install pywin32
+    pause
+    exit /b 1
+)
 
 echo.
 echo Step 2: Installing NSSM (Non-Sucking Service Manager)...
@@ -18,7 +38,14 @@ rmdir /s /q nssm-2.24
 
 echo.
 echo Step 3: Creating Windows Service...
-nssm install "WFH-Agent" "%CD%\python.exe" "%CD%\service_wrapper.py"
+for /f "tokens=*" %%i in ('where python') do set PYTHON_PATH=%%i
+if "%PYTHON_PATH%"=="" (
+    echo Error: Python not found in PATH
+    pause
+    exit /b 1
+)
+
+nssm install "WFH-Agent" "%PYTHON_PATH%" "%CD%\service_wrapper.py"
 nssm set "WFH-Agent" AppDirectory "%CD%"
 nssm set "WFH-Agent" DisplayName "WFH Monitoring Agent"
 nssm set "WFH-Agent" Description "Employee monitoring agent for work from home"
