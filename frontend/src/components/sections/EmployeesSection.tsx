@@ -450,8 +450,12 @@ const EmployeesSection: React.FC = () => {
                   <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
                     {emp.status === 'online' ? '🟢 Online' : '🔴 Offline'} • {emp.public_ip}
                   </div>
-                  <div style={{ fontSize: '10px', color: '#888' }}>
-                    📍 {emp.location}
+                  <div style={{ 
+                    fontSize: '10px', 
+                    color: emp.location === 'Office Bangalore' ? '#007bff' : '#28a745',
+                    fontWeight: '500'
+                  }}>
+                    {emp.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote work'}
                   </div>
                 </td>
                 <td>
