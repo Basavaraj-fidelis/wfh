@@ -880,19 +880,85 @@ Configuration:
 - Grant necessary permissions in System Preferences > Security & Privacy
 """
 
+                # macOS LaunchAgent plist file
+                plist_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.wfh.monitoring.agent</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/python3</string>
+        <string>{{PWD}}/agent.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>{{PWD}}</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>{{PWD}}/agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>{{PWD}}/agent_error.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>'''
+
                 # macOS installation script
                 mac_script = '''#!/bin/bash
-echo "Installing WFH Monitoring Agent for macOS..."
+set -e
+
+echo "============================================"
+echo "WFH Monitoring Agent - macOS Installation"
+echo "============================================"
 echo
+
+# Get current directory
+CURRENT_DIR="$(pwd)"
 
 echo "Step 1: Installing Python dependencies..."
-pip3 install -r agent_requirements.txt
+if command -v pip3 >/dev/null 2>&1; then
+    pip3 install -r agent_requirements.txt
+elif command -v pip >/dev/null 2>&1; then
+    pip install -r agent_requirements.txt
+else
+    echo "Error: pip not found. Please install Python 3 first."
+    echo "Install Python: brew install python"
+    exit 1
+fi
 
 echo
-echo "Step 2: Agent ready to run..."
-echo "Run: python3 agent.py"
-echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
+echo "Step 2: Setting up LaunchAgent for automatic startup..."
+
+# Create LaunchAgents directory if it doesn't exist
+mkdir -p ~/Library/LaunchAgents
+
+# Update plist with current directory
+sed "s|{{PWD}}|$CURRENT_DIR|g" com.wfh.monitoring.agent.plist > ~/Library/LaunchAgents/com.wfh.monitoring.agent.plist
+
+echo
+echo "Step 3: Installation complete!"
+echo
+echo "Choose your preferred mode:"
+echo "[1] Manual Mode: python3 agent.py"
+echo "[2] Service Mode (Recommended):"
+echo "    - Load:   launchctl load ~/Library/LaunchAgents/com.wfh.monitoring.agent.plist"
+echo "    - Start:  launchctl start com.wfh.monitoring.agent"
+echo "    - Stop:   launchctl stop com.wfh.monitoring.agent"
+echo "    - Unload: launchctl unload ~/Library/LaunchAgents/com.wfh.monitoring.agent.plist"
+echo
+echo "Service will auto-start on login and restart if it crashes."
+echo "Logs will be saved to agent.log and agent_error.log"
+echo
+read -p "Press Enter to continue..."
 '''
+                zip_file.writestr('com.wfh.monitoring.agent.plist', plist_content)
                 zip_file.writestr('install.sh', mac_script)
 
             else:  # linux
