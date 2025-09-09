@@ -760,9 +760,138 @@ echo.
 echo Step 2: Agent ready to run...
 echo Run: python agent.py
 echo To run in background: start /b python agent.py
+echo.
+echo For Windows Service installation:
+echo Run as Administrator: install_service_windows.bat
 pause
 """
                 zip_file.writestr('install.bat', windows_script)
+
+                # Add Windows service installer
+                service_installer = """@echo off
+echo Installing WFH Agent as Windows Service...
+echo This requires Administrator privileges.
+echo.
+
+REM Check if running as administrator
+net session >nul 2>&1
+if %errorLevel% == 0 (
+    echo Administrator privileges confirmed.
+) else (
+    echo ERROR: This script requires Administrator privileges.
+    echo Please run as Administrator.
+    pause
+    exit /b 1
+)
+
+echo.
+echo Installing Python dependencies...
+pip install -r agent_requirements.txt
+pip install pywin32
+
+echo.
+echo Installing service...
+python service_wrapper.py install
+
+echo.
+echo Starting WFH Agent service...
+python service_wrapper.py start
+
+echo.
+echo WFH Agent service installed and started successfully.
+echo Service will start automatically on system boot.
+echo.
+echo To manage the service:
+echo   Start:   python service_wrapper.py start
+echo   Stop:    python service_wrapper.py stop
+echo   Remove:  python service_wrapper.py remove
+pause
+"""
+                zip_file.writestr('install_service_windows.bat', service_installer)
+
+                # Add service wrapper
+                try:
+                    with open('../agent/service_wrapper.py', 'r') as f:
+                        service_wrapper_content = f.read()
+                    zip_file.writestr('service_wrapper.py', service_wrapper_content)
+                except FileNotFoundError:
+                    # Create basic service wrapper if file not found
+                    service_wrapper_content = '''#!/usr/bin/env python3
+"""
+Windows Service Wrapper for WFH Agent
+"""
+
+import sys
+import os
+import win32serviceutil
+import win32service
+import win32event
+import servicemanager
+import socket
+import subprocess
+import time
+
+class WFHAgentService(win32serviceutil.ServiceFramework):
+    _svc_name_ = "WFHAgent"
+    _svc_display_name_ = "WFH Monitoring Agent"
+    _svc_description_ = "Work From Home Employee Monitoring Agent"
+
+    def __init__(self, args):
+        win32serviceutil.ServiceFramework.__init__(self, args)
+        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+        socket.setdefaulttimeout(60)
+        self.is_alive = True
+
+    def SvcStop(self):
+        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+        win32event.SetEvent(self.hWaitStop)
+        self.is_alive = False
+
+    def SvcDoRun(self):
+        servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                              servicemanager.PYS_SERVICE_STARTED,
+                              (self._svc_name_, ''))
+        self.main()
+
+    def main(self):
+        # Get the directory where the service is running
+        service_dir = os.path.dirname(os.path.abspath(__file__))
+        agent_path = os.path.join(service_dir, 'agent.py')
+        
+        while self.is_alive:
+            try:
+                # Start the agent process
+                process = subprocess.Popen([sys.executable, agent_path], 
+                                         cwd=service_dir,
+                                         stdout=subprocess.PIPE, 
+                                         stderr=subprocess.PIPE)
+                
+                # Wait for process to complete or service to stop
+                while self.is_alive and process.poll() is None:
+                    time.sleep(1)
+                
+                if not self.is_alive:
+                    process.terminate()
+                    break
+                    
+                # If process died, wait before restarting
+                if self.is_alive:
+                    time.sleep(30)
+                    
+            except Exception as e:
+                servicemanager.LogErrorMsg(f"Service error: {e}")
+                if self.is_alive:
+                    time.sleep(60)
+
+if __name__ == '__main__':
+    if len(sys.argv) == 1:
+        servicemanager.Initialize()
+        servicemanager.PrepareToHostSingle(WFHAgentService)
+        servicemanager.StartServiceCtrlDispatcher()
+    else:
+        win32serviceutil.HandleCommandLine(WFHAgentService)
+'''
+                    zip_file.writestr('service_wrapper.py', service_wrapper_content)
 
             elif platform == 'mac':
                 instructions += """

@@ -49,6 +49,7 @@ class EmployeeLog(Base):
     public_ip = Column(String)
     location = Column(Text)  # JSON string with location data
     screenshot_path = Column(String)
+    activity_data = Column(Text, default="{}")  # JSON string for activity tracking
     timestamp = Column(DateTime, default=datetime.utcnow)
     created_at = Column(DateTime, default=datetime.utcnow)
 
