@@ -321,6 +321,12 @@ const ReportsSection: React.FC = () => {
     </div>
   );
 
+  const handleTabChange = (tab: string) => {
+    setCurrentTab(tab);
+    setReportData(null);
+    setLoading(false);
+  };
+
   return (
     <div>
       <h3>Reports & Analytics</h3>
@@ -328,19 +334,19 @@ const ReportsSection: React.FC = () => {
       <div className="report-tabs">
         <button 
           className={`report-tab ${currentTab === 'daily' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('daily')}
+          onClick={() => handleTabChange('daily')}
         >
           Daily Reports
         </button>
         <button 
           className={`report-tab ${currentTab === 'weekly' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('weekly')}
+          onClick={() => handleTabChange('weekly')}
         >
           Weekly Reports
         </button>
         <button 
           className={`report-tab ${currentTab === 'custom' ? 'active' : ''}`}
-          onClick={() => setCurrentTab('custom')}
+          onClick={() => handleTabChange('custom')}
         >
           Custom Range
         </button>

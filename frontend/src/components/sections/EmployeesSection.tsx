@@ -55,7 +55,7 @@ const EmployeesSection: React.FC = () => {
     selectedEmployee: null,
     employeeData: null
   });
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(false); // Corrected initialization for loading state
 
   useEffect(() => {
     loadEmployees();
@@ -106,7 +106,7 @@ const EmployeesSection: React.FC = () => {
     try {
       const response = await axios.get(`/api/admin/employees/${username}/logs?days=7`);
       const employee = employees.find(emp => emp.username === username);
-      
+
       setViewState({
         currentView: 'employee-detail',
         selectedEmployee: username,
@@ -141,7 +141,7 @@ const EmployeesSection: React.FC = () => {
     const circumference = 2 * Math.PI * 45; // radius = 45
     const strokeDasharray = circumference;
     const strokeDashoffset = circumference - (percentage / 100) * circumference;
-    
+
     return (
       <div className="circular-progress-container">
         <svg width="120" height="120" className="circular-progress">
@@ -154,7 +154,7 @@ const EmployeesSection: React.FC = () => {
             strokeWidth="8"
             fill="transparent"
           />
-          
+
           {/* Working time circle (pink) */}
           <circle
             cx="60"
@@ -169,7 +169,7 @@ const EmployeesSection: React.FC = () => {
             transform="rotate(-90 60 60)"
             className="progress-circle"
           />
-          
+
           {/* Productive time circle (purple) */}
           <circle
             cx="60"
@@ -184,7 +184,7 @@ const EmployeesSection: React.FC = () => {
             transform="rotate(-90 60 60)"
             className="progress-circle"
           />
-          
+
           {/* Computer activity circle (mint) */}
           <circle
             cx="60"
@@ -199,7 +199,7 @@ const EmployeesSection: React.FC = () => {
             transform="rotate(-90 60 60)"
             className="progress-circle"
           />
-          
+
           {/* Center text */}
           <text
             x="60"
@@ -213,9 +213,9 @@ const EmployeesSection: React.FC = () => {
             {percentage}%
           </text>
         </svg>
-        
+
         <h3 className="progress-label">{label}</h3>
-        
+
         <div className="progress-legend">
           <div className="legend-item">
             <span className="legend-color" style={{backgroundColor: '#ff9999'}}></span>
@@ -234,10 +234,68 @@ const EmployeesSection: React.FC = () => {
     );
   };
 
-  const renderEmployeeDetail = () => {
-    if (viewState.currentView !== 'employee-detail' || !viewState.employeeData) return null;
+  const renderEmployeeDetails = (employee: any) => {
+    if (!employee) return null;
 
-    const { logs, stats } = viewState.employeeData;
+    return (
+      <div className="employee-details-modal">
+        <div className="modal-overlay" onClick={() => setViewState(prevState => ({...prevState, currentView: 'list', selectedEmployee: null, employeeData: null }))}></div>
+        <div className="modal-content">
+          <div className="details-header">
+            <h4>Employee Details: {employee.username}</h4>
+            <button className="close-btn" onClick={() => setViewState(prevState => ({...prevState, currentView: 'list', selectedEmployee: null, employeeData: null }))}>×</button>
+          </div>
+
+          <div className="details-content">
+            <div className="detail-grid">
+              <div className="detail-item">
+                <label>Employee ID:</label>
+                <span>{employee.id}</span>
+              </div>
+              <div className="detail-item">
+                <label>Status:</label>
+                <span className={`status ${employee.status}`}>{employee.status}</span>
+              </div>
+              <div className="detail-item">
+                <label>Location:</label>
+                <span>{employee.location}</span>
+              </div>
+              <div className="detail-item">
+                <label>Working Hours:</label>
+                <span>{employee.working_hours}</span>
+              </div>
+              <div className="detail-item">
+                <label>Productivity:</label>
+                <span>{employee.productivity}</span>
+              </div>
+              <div className="detail-item">
+                <label>Start Time:</label>
+                <span>{employee.start_time}</span>
+              </div>
+              <div className="detail-item">
+                <label>End Time:</label>
+                <span>{employee.end_time}</span>
+              </div>
+              <div className="detail-item">
+                <label>IP Address:</label>
+                <span>{employee.public_ip}</span>
+              </div>
+              <div className="detail-item">
+                <label>Last Seen:</label>
+                <span>{employee.last_seen ? new Date(employee.last_seen).toLocaleString() : 'N/A'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderEmployeeDetailView = () => {
+    const employee = employees.find(emp => emp.username === viewState.selectedEmployee);
+    if (!employee || !viewState.employeeData) return null;
+
+    const { logs } = viewState.employeeData;
 
     return (
       <div className="employee-detail-page">
@@ -255,34 +313,34 @@ const EmployeesSection: React.FC = () => {
           <div className="employee-stats-grid">
             <div className="stat-card">
               <h4>Status</h4>
-              <p className="stat-value" style={{ color: stats.status === 'online' ? '#28a745' : '#dc3545' }}>
-                {stats.status === 'online' ? '🟢 Online' : '🔴 Offline'}
+              <p className="stat-value" style={{ color: employee.status === 'online' ? '#28a745' : '#dc3545' }}>
+                {employee.status === 'online' ? '🟢 Online' : '🔴 Offline'}
               </p>
             </div>
             <div className="stat-card">
               <h4>Working Hours</h4>
-              <p className="stat-value">{stats.working_hours || '0h 0m'}</p>
+              <p className="stat-value">{employee.working_hours || '0h 0m'}</p>
             </div>
             <div className="stat-card">
               <h4>Productivity</h4>
-              <p className="stat-value">{stats.productivity || '0%'}</p>
+              <p className="stat-value">{employee.productivity || '0%'}</p>
             </div>
             <div className="stat-card">
               <h4>Work Location</h4>
               <p className="stat-value" style={{ 
-                color: stats.location === 'Office Bangalore' ? '#007bff' : '#28a745'
+                color: employee.location === 'Office Bangalore' ? '#007bff' : '#28a745'
               }}>
-                {stats.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote'}
+                {employee.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote'}
               </p>
             </div>
             <div className="stat-card">
               <h4>Public IP</h4>
-              <p className="stat-value" style={{ fontSize: '16px' }}>{stats.public_ip || 'Unknown'}</p>
+              <p className="stat-value" style={{ fontSize: '16px' }}>{employee.public_ip || 'Unknown'}</p>
             </div>
             <div className="stat-card">
               <h4>Last Seen</h4>
               <p className="stat-value" style={{ fontSize: '16px' }}>
-                {stats.last_seen ? new Date(stats.last_seen).toLocaleString() : 'Unknown'}
+                {employee.last_seen ? new Date(employee.last_seen).toLocaleString() : 'Unknown'}
               </p>
             </div>
           </div>
@@ -326,7 +384,7 @@ const EmployeesSection: React.FC = () => {
                         </span>
                       </div>
                     </div>
-                    
+
                     <div className="screenshot-container">
                       {log.screenshot_path && log.screenshot_path.trim() !== '' ? (
                         <>
@@ -391,7 +449,7 @@ const EmployeesSection: React.FC = () => {
                   🏠 Remote: {dashboardStats.remote_count} employees
                 </div>
               </div>
-              
+
               <div className="chart-card">
                 <div className="chart-wrapper">
                   <CircularProgress 
@@ -404,7 +462,7 @@ const EmployeesSection: React.FC = () => {
                 </div>
               </div>
             </div>
-            
+
             <div className="legend-panel">
               <div className="legend-item-new">
                 <span className="legend-dot" style={{backgroundColor: '#ff9999'}}></span>
@@ -528,7 +586,7 @@ const EmployeesSection: React.FC = () => {
 
   // Main return statement
   if (viewState.currentView === 'employee-detail') {
-    return renderEmployeeDetail();
+    return renderEmployeeDetailView();
   }
 
   return renderEmployeeList();
