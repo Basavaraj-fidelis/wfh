@@ -1,4 +1,4 @@
-modules = ["python-3.11", "nodejs-20", "web", "bash"]
+modules = ["python-3.11", "nodejs-20", "web", "bash", "python3"]
 [agent]
 expertMode = true
 
@@ -83,7 +83,7 @@ externalPort = 8000
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "libiconv", "libxcrypt", "rustc"]
+packages = ["cargo", "freetype", "lcms2", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "rustc", "tcl", "tk", "zlib"]
 
 [deployment]
 deploymentTarget = "vm"

@@ -48,41 +48,124 @@ class MonitoringAgent:
             return "unknown"
     
     def get_public_ip(self):
-        """Get public IP address"""
+        """Get public IP address with multiple fallback services"""
+        # List of reliable IP detection services
+        services = [
+            ('https://api.ipify.org?format=json', 'ip'),
+            ('https://ipapi.co/json/', 'ip'),
+            ('https://ifconfig.me/ip', 'text'),
+            ('https://icanhazip.com/', 'text'),
+            ('https://httpbin.org/ip', 'origin')
+        ]
+        
+        for url, key in services:
+            try:
+                response = requests.get(url, timeout=8)
+                if response.status_code == 200:
+                    if key == 'text':
+                        # Plain text response
+                        ip = response.text.strip()
+                        if self._is_valid_ip(ip):
+                            return ip
+                    else:
+                        # JSON response
+                        data = response.json()
+                        ip = data.get(key, '').strip()
+                        if self._is_valid_ip(ip):
+                            return ip
+            except Exception as e:
+                print(f"IP service {url} failed: {e}")
+                continue
+        
+        return "unknown"
+    
+    def _is_valid_ip(self, ip):
+        """Validate IP address format"""
+        if not ip or ip == "unknown":
+            return False
+        # Basic IP validation
+        parts = ip.split('.')
+        if len(parts) != 4:
+            return False
         try:
-            response = requests.get('https://httpbin.org/ip', timeout=10)
-            return response.json().get('origin', 'unknown')
-        except:
-            return "unknown"
+            for part in parts:
+                num = int(part)
+                if not 0 <= num <= 255:
+                    return False
+            return True
+        except ValueError:
+            return False
     
     def get_location(self, public_ip):
-        """Get approximate location from IP using ipinfo.io"""
-        try:
-            # Use ipinfo.io for accurate geolocation
-            response = requests.get(f'https://ipinfo.io/{public_ip}/json', timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                return json.dumps({
-                    "ip": data.get('ip', public_ip),
-                    "country": data.get('country', 'Unknown'),
-                    "region": data.get('region', 'Unknown'), 
-                    "city": data.get('city', 'Unknown'),
-                    "provider": data.get('org', 'Unknown'),
-                    "timezone": data.get('timezone', 'Unknown'),
-                    "location": data.get('loc', 'Unknown')
-                })
-            else:
-                # Fallback to basic info
-                return json.dumps({
-                    "ip": public_ip,
-                    "country": "Unknown",
-                    "region": "Unknown", 
-                    "city": "Unknown",
-                    "provider": "Unknown",
-                    "error": f"ipinfo.io returned {response.status_code}"
-                })
-        except Exception as e:
-            return json.dumps({"ip": public_ip, "error": f"Could not determine location: {str(e)}"})
+        """Get approximate location from IP using multiple services"""
+        if public_ip == "unknown" or not self._is_valid_ip(public_ip):
+            return json.dumps({
+                "ip": "unknown",
+                "country": "Unknown",
+                "region": "Unknown", 
+                "city": "Unknown",
+                "provider": "Unknown",
+                "error": "Invalid IP address"
+            })
+            
+        # Try multiple location services
+        location_services = [
+            f'https://ipapi.co/{public_ip}/json/',
+            f'https://ipinfo.io/{public_ip}/json',
+            f'http://ip-api.com/json/{public_ip}'
+        ]
+        
+        for service_url in location_services:
+            try:
+                response = requests.get(service_url, timeout=10)
+                if response.status_code == 200:
+                    data = response.json()
+                    
+                    # Handle different API response formats
+                    if 'ipapi.co' in service_url:
+                        return json.dumps({
+                            "ip": data.get('ip', public_ip),
+                            "country": data.get('country_name', 'Unknown'),
+                            "region": data.get('region', 'Unknown'),
+                            "city": data.get('city', 'Unknown'),
+                            "provider": data.get('org', 'Unknown'),
+                            "timezone": data.get('timezone', 'Unknown'),
+                            "location": f"{data.get('latitude', '')},{data.get('longitude', '')}"
+                        })
+                    elif 'ipinfo.io' in service_url:
+                        return json.dumps({
+                            "ip": data.get('ip', public_ip),
+                            "country": data.get('country', 'Unknown'),
+                            "region": data.get('region', 'Unknown'),
+                            "city": data.get('city', 'Unknown'),
+                            "provider": data.get('org', 'Unknown'),
+                            "timezone": data.get('timezone', 'Unknown'),
+                            "location": data.get('loc', 'Unknown')
+                        })
+                    elif 'ip-api.com' in service_url:
+                        return json.dumps({
+                            "ip": data.get('query', public_ip),
+                            "country": data.get('country', 'Unknown'),
+                            "region": data.get('regionName', 'Unknown'),
+                            "city": data.get('city', 'Unknown'),
+                            "provider": data.get('isp', 'Unknown'),
+                            "timezone": data.get('timezone', 'Unknown'),
+                            "location": f"{data.get('lat', '')},{data.get('lon', '')}"
+                        })
+                        
+            except Exception as e:
+                print(f"Location service {service_url} failed: {e}")
+                continue
+        
+        # All services failed
+        return json.dumps({
+            "ip": public_ip,
+            "country": "Unknown",
+            "region": "Unknown", 
+            "city": "Unknown",
+            "provider": "Unknown",
+            "error": "All location services failed"
+        })
     
     def take_screenshot(self):
         """Take screenshot and save temporarily - Cross-platform compatible"""
