@@ -5,9 +5,13 @@ echo.
 
 echo Checking current directory...
 echo Current directory: %CD%
+
+REM Change to the directory where this batch file is located
+cd /d "%~dp0"
+
 if not exist "agent_requirements.txt" (
-    echo Error: agent_requirements.txt not found in current directory
-    echo Please run this script from the agent folder containing agent.py and agent_requirements.txt
+    echo Error: agent_requirements.txt not found in current directory: %CD%
+    echo Please ensure agent.py and agent_requirements.txt are in the same folder as install_service_windows.bat
     pause
     exit /b 1
 )

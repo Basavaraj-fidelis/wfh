@@ -689,7 +689,7 @@ class MonitoringAgent:
 def main():
     """Main function - configure and start agent"""
     # Configuration - modify these values
-    SERVER_URL = "https://e1cdd19c-fdf6-4b9f-94bf-b122742d048e-00-2ltrq5fmw548e.riker.replit.dev"  # Change to your Replit deployment URL
+    SERVER_URL = "https://bac533f9-caab-40a5-985b-77e95b5b3548-00-26yof333ddv5c.spock.replit.dev"  # Change to your Replit deployment URL
     AUTH_TOKEN = "agent-secret-token-change-this-in-production"  # Agent authentication token
     
     # You can also read from environment variables or config file
