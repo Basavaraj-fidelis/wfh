@@ -287,9 +287,20 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             
             working_hours = active_seconds / 3600
             
-            # Calculate productivity (simple metric: active time / total time * 100)
+            # Calculate productivity based on office standards
+            # Office standard: 8 hours productive out of 9 hours = 88.89% productivity
             total_span = (last_activity - first_activity).total_seconds() / 3600
-            productivity = (working_hours / total_span * 100) if total_span > 0 else 0
+            
+            if total_span > 0:
+                # If working less than 4 hours, use direct ratio
+                if total_span < 4:
+                    productivity = (working_hours / total_span * 100)
+                else:
+                    # For full working day (4+ hours), calculate based on 8h/9h standard
+                    expected_productive_hours = min(total_span * 0.8889, 8.0)  # 88.89% of time or max 8 hours
+                    productivity = min((working_hours / expected_productive_hours * 100), 100)
+            else:
+                productivity = 0
         else:
             first_activity = None
             last_activity = None 
@@ -539,8 +550,28 @@ def get_daily_report(
         if heartbeats:
             first_heartbeat = heartbeats[0].timestamp
             last_heartbeat = heartbeats[-1].timestamp
-            hours_worked = (last_heartbeat - first_heartbeat).total_seconds() / 3600
-            total_hours += hours_worked
+            
+            # Calculate active time (sum of gaps <= 15 minutes)
+            active_seconds = 0
+            for i in range(len(heartbeats) - 1):
+                gap = (heartbeats[i + 1].timestamp - heartbeats[i].timestamp).total_seconds()
+                if gap <= 900:  # 15 minutes
+                    active_seconds += gap
+            
+            active_hours = active_seconds / 3600
+            total_span_hours = (last_heartbeat - first_heartbeat).total_seconds() / 3600
+            
+            # Calculate productivity based on office standards
+            if total_span_hours > 0:
+                if total_span_hours < 4:
+                    productivity = (active_hours / total_span_hours * 100)
+                else:
+                    expected_productive_hours = min(total_span_hours * 0.8889, 8.0)
+                    productivity = min((active_hours / expected_productive_hours * 100), 100)
+            else:
+                productivity = 0
+            
+            total_hours += active_hours
 
             # Get detailed logs count
             logs_count = db.query(EmployeeLog).filter(
@@ -551,7 +582,9 @@ def get_daily_report(
 
             report_data.append({
                 "username": username,
-                "hours_worked": round(hours_worked, 2),
+                "hours_worked": round(active_hours, 2),
+                "total_span_hours": round(total_span_hours, 2),
+                "productivity": f"{int(productivity)}%",
                 "first_activity": first_heartbeat,
                 "last_activity": last_heartbeat,
                 "heartbeats_count": len(heartbeats),
