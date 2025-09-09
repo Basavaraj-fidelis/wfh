@@ -55,7 +55,7 @@ const EmployeesSection: React.FC = () => {
     selectedEmployee: null,
     employeeData: null
   });
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
 
   useEffect(() => {
     loadEmployees();
@@ -328,13 +328,21 @@ const EmployeesSection: React.FC = () => {
                     </div>
                     
                     <div className="screenshot-container">
-                      {log.screenshot_path ? (
+                      {log.screenshot_path && log.screenshot_path.trim() !== '' ? (
                         <>
                           <img 
                             src={`/api/screenshots/${log.screenshot_path.split('/').pop()}`}
                             alt="Employee Screenshot"
                             className="screenshot-preview"
                             onClick={() => window.open(`/api/screenshots/${log.screenshot_path.split('/').pop()}`, '_blank')}
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              const container = target.parentElement;
+                              if (container) {
+                                container.innerHTML = '<div style="width: 100%; height: 200px; background: #f8f9fa; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #666;">📷 Screenshot not available</div>';
+                              }
+                            }}
                           />
                           <div className="screenshot-label">
                             Click to view full size
