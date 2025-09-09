@@ -1,21 +1,20 @@
 
 import React from 'react';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AgentSection: React.FC = () => {
+  const { token, isAuthenticated } = useAuth();
+  
   const downloadAgent = async (platform: string) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
+      if (!isAuthenticated || !token) {
         alert('Please login first');
         return;
       }
 
       const response = await axios.get(`/api/download/agent/${platform}`, {
-        responseType: 'blob',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        responseType: 'blob'
       });
       
       const url = window.URL.createObjectURL(new Blob([response.data]));
