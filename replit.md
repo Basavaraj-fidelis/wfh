@@ -5,7 +5,7 @@ This is a Work From Home (WFH) Employee Monitoring System designed to track empl
 The agent sends regular heartbeats every 5 minutes to indicate the employee is online, and twice daily sends detailed logs including screenshots, IP addresses, and location data. The central server provides APIs for data collection and an admin dashboard for viewing employee activity.
 
 ## Current Status
-✅ **FULLY OPERATIONAL WITH ENHANCED ARCHITECTURE** - Complete WFH monitoring system implemented with comprehensive improvements:
+✅ **FULLY OPERATIONAL IN REPLIT ENVIRONMENT** - Complete WFH monitoring system successfully imported and configured for Replit:
 - FastAPI backend server with PostgreSQL database and connection pooling
 - Enhanced admin-only authentication with JWT security and account lockout protection
 - Advanced working hours calculation with gap detection algorithm
