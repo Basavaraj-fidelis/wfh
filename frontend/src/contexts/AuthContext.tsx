@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
+import { BrowserRouter } from 'react-router-dom';
 
 interface AuthContextType {
   token: string | null;
@@ -86,16 +87,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsInitialized(true);
   }, []);
 
-  // Auto-logout if token is expired
-  React.useEffect(() => {
+  // Token validation effect
+  useEffect(() => {
     if (token && !isTokenValid(token)) {
       logout();
     }
   }, [token]);
 
-  // Set up axios interceptor for authentication
+  // Setup axios interceptors
   useEffect(() => {
-    const interceptor = axios.interceptors.request.use(
+    const requestInterceptor = axios.interceptors.request.use(
       (config) => {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
@@ -116,7 +117,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     return () => {
-      axios.interceptors.request.eject(interceptor);
+      axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(responseInterceptor);
     };
   }, [token]);
