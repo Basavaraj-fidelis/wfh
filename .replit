@@ -87,5 +87,5 @@ packages = ["cargo", "freetype", "lcms2", "libiconv", "libimagequant", "libjpeg"
 
 [deployment]
 deploymentTarget = "autoscale"
-run = ["bash", "-c", "cd server && python main.py & cd frontend && npm run preview"]
-build = ["npm", "run", "build"]
+run = ["bash", "-c", "cd server && python main.py"]
+build = ["npm", "run", "build", "&&", "cd", "frontend", "&&", "npm", "run", "build"]
