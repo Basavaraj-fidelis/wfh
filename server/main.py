@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_
 from pydantic import BaseModel
 
-from database import get_db, create_tables, EmployeeHeartbeat, EmployeeLog, AdminUser
+from database import get_db, create_tables, EmployeeHeartbeat, EmployeeLog, AdminUser, EmployeeActivitySummary, EmployeeHourlyActivity
 from auth import verify_admin_token, verify_agent_token, get_password_hash, create_access_token, verify_password
 
 # Initialize database using lifespan context manager
@@ -145,6 +145,122 @@ def receive_detailed_log(
             buffer.write(content)
             print(f"Screenshot saved, size: {len(content)} bytes")
 
+        # Parse and process comprehensive activity data
+        try:
+            activity_json = json.loads(activity_data)
+            
+            # Extract summary data
+            date_str = activity_json.get("date", timestamp.date().isoformat())
+            total_active_minutes = activity_json.get("total_active_time_minutes", 0)
+            total_tracked_minutes = activity_json.get("total_tracked_time_minutes", 0)
+            activity_rate = activity_json.get("activity_rate_percentage", 0)
+            productivity_score = activity_json.get("summary", {}).get("productivity_score", 0)
+            
+            # Update or create activity summary
+            existing_summary = db.query(EmployeeActivitySummary).filter(
+                EmployeeActivitySummary.username == username,
+                EmployeeActivitySummary.date == date_str
+            ).first()
+            
+            if existing_summary:
+                # Update existing record
+                existing_summary.total_active_minutes = total_active_minutes
+                existing_summary.total_tracked_minutes = total_tracked_minutes
+                existing_summary.activity_rate_percentage = int(activity_rate)
+                existing_summary.productivity_score = int(productivity_score)
+                existing_summary.apps_used_count = activity_json.get("summary", {}).get("apps_used_count", 0)
+                existing_summary.websites_visited_count = activity_json.get("summary", {}).get("websites_visited_count", 0)
+                existing_summary.browser_events_count = activity_json.get("browser_events_total", 0)
+                existing_summary.activitywatch_available = activity_json.get("activitywatch_available", False)
+                existing_summary.app_usage_data = json.dumps(activity_json.get("our_app_usage_minutes", {}))
+                existing_summary.website_usage_data = json.dumps(activity_json.get("browser_activity_counts", {}))
+                existing_summary.activitywatch_data = json.dumps(activity_json.get("activitywatch_data", {}))
+                existing_summary.network_location_data = json.dumps({
+                    "network": activity_json.get("network_info", {}),
+                    "location": activity_json.get("location_info", {})
+                })
+                existing_summary.updated_at = timestamp
+            else:
+                # Create new summary record
+                activity_summary = EmployeeActivitySummary(
+                    username=username,
+                    date=date_str,
+                    total_active_minutes=total_active_minutes,
+                    total_tracked_minutes=total_tracked_minutes,
+                    activity_rate_percentage=int(activity_rate),
+                    productivity_score=int(productivity_score),
+                    apps_used_count=activity_json.get("summary", {}).get("apps_used_count", 0),
+                    websites_visited_count=activity_json.get("summary", {}).get("websites_visited_count", 0),
+                    browser_events_count=activity_json.get("browser_events_total", 0),
+                    activitywatch_available=activity_json.get("activitywatch_available", False),
+                    app_usage_data=json.dumps(activity_json.get("our_app_usage_minutes", {})),
+                    website_usage_data=json.dumps(activity_json.get("browser_activity_counts", {})),
+                    activitywatch_data=json.dumps(activity_json.get("activitywatch_data", {})),
+                    network_location_data=json.dumps({
+                        "network": activity_json.get("network_info", {}),
+                        "location": activity_json.get("location_info", {})
+                    }),
+                    created_at=timestamp
+                )
+                db.add(activity_summary)
+            
+            # Process hourly data if available
+            keyboard_mouse_events = activity_json.get("keyboard_mouse_events", [])
+            current_hour = timestamp.hour
+            
+            # Calculate hourly activity
+            hourly_active = 0
+            hourly_idle = 0
+            
+            for event in keyboard_mouse_events:
+                try:
+                    event_time = datetime.fromisoformat(event.get("timestamp", ""))
+                    if event_time.hour == current_hour:
+                        if event.get("is_active", False):
+                            hourly_active += 1
+                        else:
+                            hourly_idle += 1
+                except:
+                    pass
+            
+            # Get top app and website for current hour
+            app_usage = activity_json.get("our_app_usage_minutes", {})
+            website_usage = activity_json.get("browser_activity_counts", {})
+            
+            top_app = max(app_usage.keys(), key=lambda k: app_usage[k]) if app_usage else ""
+            top_website = max(website_usage.keys(), key=lambda k: website_usage[k]) if website_usage else ""
+            
+            # Update or create hourly record
+            existing_hourly = db.query(EmployeeHourlyActivity).filter(
+                EmployeeHourlyActivity.username == username,
+                EmployeeHourlyActivity.date == date_str,
+                EmployeeHourlyActivity.hour == current_hour
+            ).first()
+            
+            if existing_hourly:
+                existing_hourly.active_minutes = hourly_active
+                existing_hourly.idle_minutes = hourly_idle
+                existing_hourly.top_app = top_app
+                existing_hourly.top_website = top_website
+                existing_hourly.keyboard_mouse_events = len(keyboard_mouse_events)
+            else:
+                hourly_activity = EmployeeHourlyActivity(
+                    username=username,
+                    date=date_str,
+                    hour=current_hour,
+                    active_minutes=hourly_active,
+                    idle_minutes=hourly_idle,
+                    top_app=top_app,
+                    top_website=top_website,
+                    keyboard_mouse_events=len(keyboard_mouse_events),
+                    created_at=timestamp
+                )
+                db.add(hourly_activity)
+                
+        except Exception as e:
+            print(f"Error processing activity data: {e}")
+            # Continue with basic log saving even if activity processing fails
+
         # Save detailed log
         log_record = EmployeeLog(
             username=username,
@@ -160,13 +276,14 @@ def receive_detailed_log(
         print(f"Saving log record to database...")
         db.add(log_record)
         db.commit()
-        print(f"Log record saved successfully with ID: {log_record.id}")
+        print(f"Log record and activity summaries saved successfully with ID: {log_record.id}")
 
         return {
             "status": "success",
-            "message": "Detailed log received",
+            "message": "Comprehensive detailed log received and processed",
             "screenshot_saved": filename,
-            "log_id": log_record.id
+            "log_id": log_record.id,
+            "activity_summary_updated": True
         }
 
     except Exception as e:
@@ -417,6 +534,137 @@ def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends
 
     return {"employees": employees}
 
+@app.get("/api/admin/employees/{username}/day-details")
+def get_employee_day_details(
+    username: str,
+    date: Optional[str] = None,
+    admin=Depends(verify_admin_token),
+    db: Session = Depends(get_db)
+):
+    """Get comprehensive day details for a specific employee"""
+    if date:
+        target_date = datetime.strptime(date, "%Y-%m-%d").date()
+    else:
+        target_date = datetime.utcnow().date()
+    
+    date_str = target_date.isoformat()
+    
+    # Get activity summary
+    activity_summary = db.query(EmployeeActivitySummary).filter(
+        EmployeeActivitySummary.username == username,
+        EmployeeActivitySummary.date == date_str
+    ).first()
+    
+    # Get hourly data
+    hourly_data = db.query(EmployeeHourlyActivity).filter(
+        EmployeeHourlyActivity.username == username,
+        EmployeeHourlyActivity.date == date_str
+    ).order_by(EmployeeHourlyActivity.hour).all()
+    
+    # Get heartbeats for the day
+    start_of_day = datetime.combine(target_date, datetime.min.time())
+    end_of_day = start_of_day + timedelta(days=1)
+    
+    heartbeats = db.query(EmployeeHeartbeat).filter(
+        EmployeeHeartbeat.username == username,
+        EmployeeHeartbeat.timestamp >= start_of_day,
+        EmployeeHeartbeat.timestamp < end_of_day
+    ).order_by(EmployeeHeartbeat.timestamp).all()
+    
+    # Get detailed logs for the day
+    detailed_logs = db.query(EmployeeLog).filter(
+        EmployeeLog.username == username,
+        EmployeeLog.timestamp >= start_of_day,
+        EmployeeLog.timestamp < end_of_day
+    ).order_by(EmployeeLog.timestamp).all()
+    
+    # Process data for response
+    if not activity_summary:
+        return {
+            "username": username,
+            "date": date_str,
+            "data_available": False,
+            "message": "No comprehensive activity data available for this date"
+        }
+    
+    # Parse comprehensive data
+    try:
+        app_usage = json.loads(activity_summary.app_usage_data)
+        website_usage = json.loads(activity_summary.website_usage_data)
+        activitywatch_data = json.loads(activity_summary.activitywatch_data)
+        network_location = json.loads(activity_summary.network_location_data)
+    except:
+        app_usage = {}
+        website_usage = {}
+        activitywatch_data = {}
+        network_location = {}
+    
+    # Format hourly breakdown
+    hourly_breakdown = []
+    for hour_data in hourly_data:
+        hourly_breakdown.append({
+            "hour": hour_data.hour,
+            "active_minutes": hour_data.active_minutes,
+            "idle_minutes": hour_data.idle_minutes,
+            "top_app": hour_data.top_app,
+            "top_website": hour_data.top_website,
+            "keyboard_mouse_events": hour_data.keyboard_mouse_events,
+            "screen_locked": hour_data.screen_locked
+        })
+    
+    # Format heartbeat timeline
+    heartbeat_timeline = []
+    for hb in heartbeats:
+        heartbeat_timeline.append({
+            "timestamp": hb.timestamp,
+            "status": hb.status,
+            "hostname": hb.hostname
+        })
+    
+    # Format detailed logs
+    log_entries = []
+    for log in detailed_logs:
+        try:
+            activity_data = json.loads(log.activity_data) if log.activity_data else {}
+        except:
+            activity_data = {}
+            
+        log_entries.append({
+            "timestamp": log.timestamp,
+            "screenshot_path": log.screenshot_path,
+            "location": log.location,
+            "network_info": {
+                "local_ip": log.local_ip,
+                "public_ip": log.public_ip
+            },
+            "activity_summary": activity_data.get("summary", {}),
+            "apps_tracked": len(activity_data.get("our_app_usage_minutes", {})),
+            "websites_tracked": len(activity_data.get("browser_activity_counts", {}))
+        })
+    
+    return {
+        "username": username,
+        "date": date_str,
+        "data_available": True,
+        "summary": {
+            "total_active_minutes": activity_summary.total_active_minutes,
+            "total_tracked_minutes": activity_summary.total_tracked_minutes,
+            "activity_rate_percentage": activity_summary.activity_rate_percentage,
+            "productivity_score": activity_summary.productivity_score,
+            "apps_used_count": activity_summary.apps_used_count,
+            "websites_visited_count": activity_summary.websites_visited_count,
+            "activitywatch_available": activity_summary.activitywatch_available
+        },
+        "app_usage": app_usage,
+        "website_usage": website_usage,
+        "activitywatch_data": activitywatch_data,
+        "network_location": network_location,
+        "hourly_breakdown": hourly_breakdown,
+        "heartbeat_timeline": heartbeat_timeline,
+        "detailed_logs": log_entries,
+        "work_location": "Office" if network_location.get("network", {}).get("public_ip") == "14.96.131.106" else "Remote"
+    }
+
 @app.get("/api/admin/employees/{username}/logs")
 def get_employee_logs(
     username: str,
@@ -520,14 +768,92 @@ def get_daily_report(
     admin=Depends(verify_admin_token),
     db: Session = Depends(get_db)
 ):
-    """Get daily activity report for all employees"""
+    """Get comprehensive daily activity report for all employees"""
     if date:
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     else:
         target_date = datetime.utcnow().date()
 
-    start_of_day = datetime.combine(target_date, datetime.min.time())
-    end_of_day = start_of_day + timedelta(days=1)
+    date_str = target_date.isoformat()
+
+    # Get activity summaries for the date
+    activity_summaries = db.query(EmployeeActivitySummary).filter(
+        EmployeeActivitySummary.date == date_str
+    ).all()
+
+    # Get hourly data for the date
+    hourly_data = db.query(EmployeeHourlyActivity).filter(
+        EmployeeHourlyActivity.date == date_str
+    ).all()
+
+    # Process comprehensive report
+    report_data = []
+    total_productivity = 0
+    total_active_time = 0
+    activitywatch_users = 0
+
+    for summary in activity_summaries:
+        # Get user's hourly breakdown
+        user_hourly = [h for h in hourly_data if h.username == summary.username]
+        hourly_breakdown = {}
+        for hour_data in user_hourly:
+            hourly_breakdown[hour_data.hour] = {
+                "active_minutes": hour_data.active_minutes,
+                "idle_minutes": hour_data.idle_minutes,
+                "top_app": hour_data.top_app,
+                "top_website": hour_data.top_website,
+                "events_count": hour_data.keyboard_mouse_events
+            }
+
+        # Parse app and website usage
+        try:
+            app_usage = json.loads(summary.app_usage_data)
+            website_usage = json.loads(summary.website_usage_data)
+            activitywatch_data = json.loads(summary.activitywatch_data)
+            network_location = json.loads(summary.network_location_data)
+        except:
+            app_usage = {}
+            website_usage = {}
+            activitywatch_data = {}
+            network_location = {}
+
+        if summary.activitywatch_available:
+            activitywatch_users += 1
+
+        total_productivity += summary.productivity_score
+        total_active_time += summary.total_active_minutes
+
+        report_data.append({
+            "username": summary.username,
+            "date": summary.date,
+            "total_active_minutes": summary.total_active_minutes,
+            "total_tracked_minutes": summary.total_tracked_minutes,
+            "activity_rate_percentage": summary.activity_rate_percentage,
+            "productivity_score": summary.productivity_score,
+            "apps_used_count": summary.apps_used_count,
+            "websites_visited_count": summary.websites_visited_count,
+            "browser_events_count": summary.browser_events_count,
+            "activitywatch_available": summary.activitywatch_available,
+            "app_usage": app_usage,
+            "website_usage": website_usage,
+            "activitywatch_data": activitywatch_data,
+            "network_location": network_location,
+            "hourly_breakdown": hourly_breakdown
+        })
+
+    # Calculate aggregate statistics
+    avg_productivity = (total_productivity / len(activity_summaries)) if activity_summaries else 0
+    total_employees = len(activity_summaries)
+
+    return {
+        "date": date_str,
+        "total_employees_active": total_employees,
+        "average_productivity_score": round(avg_productivity, 2),
+        "total_active_time_minutes": total_active_time,
+        "activitywatch_integration_rate": round((activitywatch_users / total_employees * 100), 2) if total_employees > 0 else 0,
+        "comprehensive_data_available": True,
+        "employees": report_data
+    }
 
     # Get all employees who were active on this date
     employees_with_activity = db.query(EmployeeHeartbeat.username).filter(

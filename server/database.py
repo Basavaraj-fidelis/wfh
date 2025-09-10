@@ -49,8 +49,45 @@ class EmployeeLog(Base):
     public_ip = Column(String)
     location = Column(Text)  # JSON string with location data
     screenshot_path = Column(String)
-    activity_data = Column(Text, default="{}")  # JSON string for activity tracking
+    activity_data = Column(Text, default="{}")  # JSON string for comprehensive activity tracking
     timestamp = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class EmployeeActivitySummary(Base):
+    __tablename__ = "employee_activity_summaries"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True)
+    date = Column(String, index=True)  # YYYY-MM-DD format
+    total_active_minutes = Column(Integer, default=0)
+    total_tracked_minutes = Column(Integer, default=0)
+    activity_rate_percentage = Column(Integer, default=0)
+    productivity_score = Column(Integer, default=0)
+    apps_used_count = Column(Integer, default=0)
+    websites_visited_count = Column(Integer, default=0)
+    screen_lock_count = Column(Integer, default=0)
+    browser_events_count = Column(Integer, default=0)
+    activitywatch_available = Column(Boolean, default=False)
+    app_usage_data = Column(Text, default="{}")  # JSON string
+    website_usage_data = Column(Text, default="{}")  # JSON string
+    activitywatch_data = Column(Text, default="{}")  # JSON string
+    network_location_data = Column(Text, default="{}")  # JSON string
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+class EmployeeHourlyActivity(Base):
+    __tablename__ = "employee_hourly_activity"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True)
+    date = Column(String, index=True)  # YYYY-MM-DD format
+    hour = Column(Integer, index=True)  # 0-23
+    active_minutes = Column(Integer, default=0)
+    idle_minutes = Column(Integer, default=0)
+    top_app = Column(String, default="")
+    top_website = Column(String, default="")
+    keyboard_mouse_events = Column(Integer, default=0)
+    screen_locked = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class EmployeeDetailedLog(Base):
