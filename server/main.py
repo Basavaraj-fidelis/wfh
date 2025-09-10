@@ -1199,7 +1199,7 @@ import socket
 import getpass
 from datetime import datetime
 
-SERVER_URL = "https://your-repl-url.replit.app"
+SERVER_URL = "https://e1cdd19c-fdf6-4b9f-94bf-b122742d048e-00-2ltrq5fmw548e.riker.replit.dev"
 AUTH_TOKEN = "agent-secret-token-change-this-in-production"
 
 def send_heartbeat():
@@ -1266,53 +1266,70 @@ psutil>=5.9.0
             zip_file.writestr('agent_requirements.txt', requirements_content)
 
             # Add platform-specific instructions
-            instructions = f"""
-# WFH Monitoring Agent Setup - {platform.title()}
-
-## Installation Instructions
-
-1. Ensure Python 3.7+ is installed on this machine
-2. Extract these files to a directory (e.g., C:\\wfh-agent\\ on Windows)
-3. Open command prompt/terminal in that directory
-4. Run: pip install -r agent_requirements.txt
-5. Edit agent.py to set your server URL if needed
-6. Run: python agent.py
-7. The agent will start sending heartbeats every 5 minutes
-
-## Configuration
-- Server URL: {os.getenv('REPL_SLUG', 'your-server-url')}
-- Agent Token: agent-secret-token-change-this-in-production
-
-## Platform-specific Notes:
-"""
+            # Use the actual server URL from the agent content for the README
+            server_url = current_url
 
             if platform == 'windows':
-                instructions += """
-### Windows Setup:
-- Run as Administrator for best compatibility
-- Add to Windows startup: Add shortcut to agent.py in:
-  %APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\
-- For service installation, use nssm or similar tools
-"""
+                instructions = f"""
+# WFH Monitoring Agent v2.0
 
-                # Windows installation script
-                windows_script = """@echo off
+## Server Connection
+Server URL: {server_url}
+Agent Token: Embedded in configuration
+
+## Quick Start
+
+### Windows:
+1. Extract this ZIP file to a folder (e.g., C:\\wfh-agent\\)
+2. Open Command Prompt as Administrator in that folder
+3. Run: install.bat (for basic installation)
+4. For service installation: install_service_windows.bat
+
+### Linux:
+1. Extract this ZIP file: unzip agent.zip
+2. Make script executable: chmod +x install_service_linux.sh  
+3. Run installer: ./install_service_linux.sh
+
+### macOS:
+1. Extract this ZIP file
+2. Make script executable: chmod +x install_service_mac.sh
+3. Run installer: ./install_service_mac.sh
+
+## Manual Installation
+If automatic installation fails:
+
+1. Install Python 3.8+ if not already installed
+2. Install dependencies: pip install -r agent_requirements.txt
+3. Test connection: python agent.py --test
+4. Run agent: python agent.py
+
+## Files Included
+- agent.py - Main monitoring script
+- config.json - Pre-configured server settings
+- agent_requirements.txt - Python dependencies
+- install.bat - Basic Windows installer
+- install_service_windows.bat - Windows service installer
+- service_wrapper.py - Windows service wrapper
+- README.txt - This file
+
+## Configuration
+- The agent is pre-configured for your server
+- Configuration file: config.json
+- Logs are written to: logs/agent.log
+
+## Service Management
+"""
+                zip_file.writestr('README.txt', instructions)
+
+                # Basic Windows installation script
+                windows_script = f'''@echo off
 echo Installing WFH Monitoring Agent for Windows...
 echo.
-
-echo Checking Python installation...
-python --version >nul 2>&1
-if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Python is not installed or not in PATH
-    echo Please install Python 3.7+ from https://python.org
-    pause
-    exit /b 1
-)
 
 echo Step 1: Installing Python dependencies...
 pip install -r agent_requirements.txt
 if %ERRORLEVEL% NEQ 0 (
-    echo Error: Failed to install dependencies. Please ensure Python and pip are installed.
+    echo Failed to install Python dependencies
     pause
     exit /b 1
 )
@@ -1321,26 +1338,18 @@ echo.
 echo Step 2: Testing agent connection...
 python agent.py --test
 if %ERRORLEVEL% NEQ 0 (
-    echo Warning: Agent test failed. Check your network connection.
+    echo Failed to connect to server. Please check your configuration.
+    pause
+    exit /b 1
 )
 
 echo.
-echo Installation complete!
+echo Installation completed successfully!
+echo You can now run the agent with: python agent.py
 echo.
-echo To run the agent:
-echo   python agent.py
-echo.
-echo To install as Windows Service (Run as Administrator):
-echo   install_service_windows.bat
-echo.
-echo To start monitoring now:
-set /p START_NOW="Start monitoring now? (y/n): "
-if /i "%START_NOW%"=="y" (
-    echo Starting agent...
-    python agent.py
-)
+echo For Windows Service installation, run: install_service_windows.bat
 pause
-"""
+'''
                 zip_file.writestr('install.bat', windows_script)
 
                 # Add Windows service installer
@@ -1470,12 +1479,57 @@ if __name__ == '__main__':
                     zip_file.writestr('service_wrapper.py', service_wrapper_content)
 
             elif platform == 'mac':
-                instructions += """
-### macOS Setup:
-- May need to allow Python in Privacy & Security settings
-- For startup: Create LaunchAgent plist file in ~/Library/LaunchAgents/
-- Grant screen recording permissions in System Preferences
+                # Create comprehensive README with installation instructions
+                instructions = f"""
+# WFH Monitoring Agent v2.0
+
+## Server Connection
+Server URL: {server_url}
+Agent Token: Embedded in configuration
+
+## Quick Start
+
+### Windows:
+1. Extract this ZIP file to a folder (e.g., C:\\wfh-agent\\)
+2. Open Command Prompt as Administrator in that folder
+3. Run: install.bat (for basic installation)
+4. For service installation: install_service_windows.bat
+
+### Linux:
+1. Extract this ZIP file: unzip agent.zip
+2. Make script executable: chmod +x install_service_linux.sh  
+3. Run installer: ./install_service_linux.sh
+
+### macOS:
+1. Extract this ZIP file
+2. Make script executable: chmod +x install_service_mac.sh
+3. Run installer: ./install_service_mac.sh
+
+## Manual Installation
+If automatic installation fails:
+
+1. Install Python 3.8+ if not already installed
+2. Install dependencies: pip install -r agent_requirements.txt
+3. Test connection: python agent.py --test
+4. Run agent: python agent.py
+
+## Files Included
+- agent.py - Main monitoring script
+- config.json - Pre-configured server settings
+- agent_requirements.txt - Python dependencies
+- install.bat - Basic Windows installer
+- install_service_windows.bat - Windows service installer
+- service_wrapper.py - Windows service wrapper
+- README.txt - This file
+
+## Configuration
+- The agent is pre-configured for your server
+- Configuration file: config.json
+- Logs are written to: logs/agent.log
+
+## Service Management
 """
+                zip_file.writestr('README.txt', instructions)
 
                 # macOS installation script
                 mac_script = """#!/bin/bash
@@ -1490,15 +1544,60 @@ echo "Step 2: Agent ready to run..."
 echo "Run: python3 agent.py"
 echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 """
-                zip_file.writestr('install.sh', mac_script)
+                zip_file.writestr('install_service_mac.sh', mac_script) # Renamed for consistency
 
             elif platform == 'linux':
-                instructions += """
-### Linux Setup:
-- Install python3-pip if not available: sudo apt install python3-pip
-- For startup: Create systemd service or add to ~/.profile
-- May need to install python3-tk for screenshot functionality
+                # Create comprehensive README with installation instructions
+                instructions = f"""
+# WFH Monitoring Agent v2.0
+
+## Server Connection
+Server URL: {server_url}
+Agent Token: Embedded in configuration
+
+## Quick Start
+
+### Windows:
+1. Extract this ZIP file to a folder (e.g., C:\\wfh-agent\\)
+2. Open Command Prompt as Administrator in that folder
+3. Run: install.bat (for basic installation)
+4. For service installation: install_service_windows.bat
+
+### Linux:
+1. Extract this ZIP file: unzip agent.zip
+2. Make script executable: chmod +x install_service_linux.sh  
+3. Run installer: ./install_service_linux.sh
+
+### macOS:
+1. Extract this ZIP file
+2. Make script executable: chmod +x install_service_mac.sh
+3. Run installer: ./install_service_mac.sh
+
+## Manual Installation
+If automatic installation fails:
+
+1. Install Python 3.8+ if not already installed
+2. Install dependencies: pip install -r agent_requirements.txt
+3. Test connection: python agent.py --test
+4. Run agent: python agent.py
+
+## Files Included
+- agent.py - Main monitoring script
+- config.json - Pre-configured server settings
+- agent_requirements.txt - Python dependencies
+- install.bat - Basic Windows installer
+- install_service_windows.bat - Windows service installer
+- service_wrapper.py - Windows service wrapper
+- README.txt - This file
+
+## Configuration
+- The agent is pre-configured for your server
+- Configuration file: config.json
+- Logs are written to: logs/agent.log
+
+## Service Management
 """
+                zip_file.writestr('README.txt', instructions)
 
                 # Linux installation script
                 linux_script = """#!/bin/bash
@@ -1513,9 +1612,7 @@ echo "Step 2: Agent ready to run..."
 echo "Run: python3 agent.py"
 echo "To run in background: nohup python3 agent.py > agent.log 2>&1 &"
 """
-                zip_file.writestr('install.sh', linux_script)
-
-            zip_file.writestr('README.txt', instructions)
+                zip_file.writestr('install_service_linux.sh', linux_script) # Renamed for consistency
 
         zip_buffer.seek(0)
         return StreamingResponse(
