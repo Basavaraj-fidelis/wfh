@@ -163,20 +163,20 @@ def receive_detailed_log(
         # Parse and process comprehensive activity data
         try:
             activity_json = json.loads(activity_data)
-            
+
             # Extract summary data
             date_str = activity_json.get("date", timestamp.date().isoformat())
             total_active_minutes = activity_json.get("total_active_time_minutes", 0)
             total_tracked_minutes = activity_json.get("total_tracked_time_minutes", 0)
             activity_rate = activity_json.get("activity_rate_percentage", 0)
             productivity_score = activity_json.get("summary", {}).get("productivity_score", 0)
-            
+
             # Update or create activity summary
             existing_summary = db.query(EmployeeActivitySummary).filter(
                 EmployeeActivitySummary.username == username,
                 EmployeeActivitySummary.date == date_str
             ).first()
-            
+
             if existing_summary:
                 # Update existing record
                 existing_summary.total_active_minutes = total_active_minutes
@@ -218,15 +218,15 @@ def receive_detailed_log(
                     created_at=timestamp
                 )
                 db.add(activity_summary)
-            
+
             # Process hourly data if available
             keyboard_mouse_events = activity_json.get("keyboard_mouse_events", [])
             current_hour = timestamp.hour
-            
+
             # Calculate hourly activity
             hourly_active = 0
             hourly_idle = 0
-            
+
             for event in keyboard_mouse_events:
                 try:
                     event_time = datetime.fromisoformat(event.get("timestamp", ""))
@@ -237,21 +237,21 @@ def receive_detailed_log(
                             hourly_idle += 1
                 except:
                     pass
-            
+
             # Get top app and website for current hour
             app_usage = activity_json.get("our_app_usage_minutes", {})
             website_usage = activity_json.get("browser_activity_counts", {})
-            
+
             top_app = max(app_usage.keys(), key=lambda k: app_usage[k]) if app_usage else ""
             top_website = max(website_usage.keys(), key=lambda k: website_usage[k]) if website_usage else ""
-            
+
             # Update or create hourly record
             existing_hourly = db.query(EmployeeHourlyActivity).filter(
                 EmployeeHourlyActivity.username == username,
                 EmployeeHourlyActivity.date == date_str,
                 EmployeeHourlyActivity.hour == current_hour
             ).first()
-            
+
             if existing_hourly:
                 existing_hourly.active_minutes = hourly_active
                 existing_hourly.idle_minutes = hourly_idle
@@ -271,7 +271,7 @@ def receive_detailed_log(
                     created_at=timestamp
                 )
                 db.add(hourly_activity)
-                
+
         except Exception as e:
             print(f"Error processing activity data: {e}")
             # Continue with basic log saving even if activity processing fails
@@ -381,13 +381,13 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
     today = datetime.utcnow().date()
     start_of_day = datetime.combine(today, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
-    
+
     # Get all employees who have any activity
     all_employees = db.query(EmployeeHeartbeat.username).distinct().all()
-    
+
     enhanced_data = []
     employee_id = 1
-    
+
     for (username,) in all_employees:
         # Get today's heartbeats
         heartbeats = db.query(EmployeeHeartbeat).filter(
@@ -395,35 +395,35 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             EmployeeHeartbeat.timestamp >= start_of_day,
             EmployeeHeartbeat.timestamp < end_of_day
         ).order_by(EmployeeHeartbeat.timestamp).all()
-        
+
         # Get latest heartbeat for status
         latest_heartbeat = db.query(EmployeeHeartbeat).filter(
             EmployeeHeartbeat.username == username
         ).order_by(desc(EmployeeHeartbeat.timestamp)).first()
-        
+
         # Get latest log for location
         latest_log = db.query(EmployeeLog).filter(
             EmployeeLog.username == username
         ).order_by(desc(EmployeeLog.timestamp)).first()
-        
+
         # Determine status
         cutoff_time = datetime.utcnow() - timedelta(minutes=10)
         status = "online" if latest_heartbeat and latest_heartbeat.timestamp > cutoff_time else "offline"
-        
+
         # Calculate working hours and times
         if heartbeats:
             first_activity = heartbeats[0].timestamp
             last_activity = heartbeats[-1].timestamp
-            
+
             # Calculate active time (sum of gaps <= 15 minutes)
             active_seconds = 0
             for i in range(len(heartbeats) - 1):
                 gap = (heartbeats[i + 1].timestamp - heartbeats[i].timestamp).total_seconds()
                 if gap <= 900:  # 15 minutes
                     active_seconds += gap
-            
+
             working_hours = active_seconds / 3600
-            
+
             # Calculate productivity based on 8 hours requirement
             # Simple formula: (actual_active_hours / 8) * 100
             productivity = min((working_hours / 8.0 * 100), 100)
@@ -432,7 +432,7 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             last_activity = None 
             working_hours = 0
             productivity = 0
-        
+
         # Parse location and determine work location
         location_text = "Remote work"
         public_ip = "Unknown"
@@ -447,7 +447,7 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
                     location_text = "Remote work"
             except:
                 pass
-        
+
         enhanced_data.append({
             "id": f"D{employee_id:03d}",
             "username": username,
@@ -463,20 +463,20 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             "raw_productivity": productivity
         })
         employee_id += 1
-    
+
     # Calculate summary statistics for dashboard
     total_employees = len(enhanced_data)
     office_employees = [emp for emp in enhanced_data if emp['location'] == 'Office Bangalore']
     remote_employees = [emp for emp in enhanced_data if emp['location'] == 'Remote work']
-    
+
     # Calculate average productivity for each location
     office_productivity = sum([emp['raw_productivity'] for emp in office_employees]) / len(office_employees) if office_employees else 0
     remote_productivity = sum([emp['raw_productivity'] for emp in remote_employees]) / len(remote_employees) if remote_employees else 0
-    
+
     # Calculate additional hybrid work insights
     online_office = [emp for emp in office_employees if emp['status'] == 'online']
     online_remote = [emp for emp in remote_employees if emp['status'] == 'online']
-    
+
     return {
         "employees": enhanced_data,
         "dashboard_stats": {
@@ -500,19 +500,19 @@ def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends
     try:
         # Get latest heartbeat for each employee - simplified query
         current_status = []
-        
+
         # Get all unique usernames first
         usernames = db.query(EmployeeHeartbeat.username).distinct().all()
-        
+
         for (username,) in usernames:
             # Get the latest heartbeat for each user
             latest_heartbeat = db.query(EmployeeHeartbeat).filter(
                 EmployeeHeartbeat.username == username
             ).order_by(desc(EmployeeHeartbeat.timestamp)).first()
-            
+
             if latest_heartbeat:
                 current_status.append(latest_heartbeat)
-                
+
     except Exception as e:
         print(f"Database error in get_employee_status: {e}")
         import traceback
@@ -575,38 +575,38 @@ def get_employee_day_details(
         target_date = datetime.strptime(date, "%Y-%m-%d").date()
     else:
         target_date = datetime.utcnow().date()
-    
+
     date_str = target_date.isoformat()
-    
+
     # Get activity summary
     activity_summary = db.query(EmployeeActivitySummary).filter(
         EmployeeActivitySummary.username == username,
         EmployeeActivitySummary.date == date_str
     ).first()
-    
+
     # Get hourly data
     hourly_data = db.query(EmployeeHourlyActivity).filter(
         EmployeeHourlyActivity.username == username,
         EmployeeHourlyActivity.date == date_str
     ).order_by(EmployeeHourlyActivity.hour).all()
-    
+
     # Get heartbeats for the day
     start_of_day = datetime.combine(target_date, datetime.min.time())
     end_of_day = start_of_day + timedelta(days=1)
-    
+
     heartbeats = db.query(EmployeeHeartbeat).filter(
         EmployeeHeartbeat.username == username,
         EmployeeHeartbeat.timestamp >= start_of_day,
         EmployeeHeartbeat.timestamp < end_of_day
     ).order_by(EmployeeHeartbeat.timestamp).all()
-    
+
     # Get detailed logs for the day
     detailed_logs = db.query(EmployeeLog).filter(
         EmployeeLog.username == username,
         EmployeeLog.timestamp >= start_of_day,
         EmployeeLog.timestamp < end_of_day
     ).order_by(EmployeeLog.timestamp).all()
-    
+
     # Process data for response
     if not activity_summary:
         return {
@@ -615,7 +615,7 @@ def get_employee_day_details(
             "data_available": False,
             "message": "No comprehensive activity data available for this date"
         }
-    
+
     # Parse comprehensive data
     try:
         app_usage = json.loads(activity_summary.app_usage_data)
@@ -627,7 +627,7 @@ def get_employee_day_details(
         website_usage = {}
         activitywatch_data = {}
         network_location = {}
-    
+
     # Format hourly breakdown
     hourly_breakdown = []
     for hour_data in hourly_data:
@@ -640,7 +640,7 @@ def get_employee_day_details(
             "keyboard_mouse_events": hour_data.keyboard_mouse_events,
             "screen_locked": hour_data.screen_locked
         })
-    
+
     # Format heartbeat timeline
     heartbeat_timeline = []
     for hb in heartbeats:
@@ -649,7 +649,7 @@ def get_employee_day_details(
             "status": hb.status,
             "hostname": hb.hostname
         })
-    
+
     # Format detailed logs
     log_entries = []
     for log in detailed_logs:
@@ -657,7 +657,7 @@ def get_employee_day_details(
             activity_data = json.loads(log.activity_data) if log.activity_data else {}
         except:
             activity_data = {}
-            
+
         log_entries.append({
             "timestamp": log.timestamp,
             "screenshot_path": log.screenshot_path,
@@ -670,7 +670,7 @@ def get_employee_day_details(
             "apps_tracked": len(activity_data.get("our_app_usage_minutes", {})),
             "websites_tracked": len(activity_data.get("browser_activity_counts", {}))
         })
-    
+
     return {
         "username": username,
         "date": date_str,
@@ -904,21 +904,21 @@ def get_daily_report(
         if heartbeats:
             first_heartbeat = heartbeats[0].timestamp
             last_heartbeat = heartbeats[-1].timestamp
-            
+
             # Calculate active time (sum of gaps <= 15 minutes)
             active_seconds = 0
             for i in range(len(heartbeats) - 1):
                 gap = (heartbeats[i + 1].timestamp - heartbeats[i].timestamp).total_seconds()
                 if gap <= 900:  # 15 minutes
                     active_seconds += gap
-            
+
             active_hours = active_seconds / 3600
             total_span_hours = (last_heartbeat - first_heartbeat).total_seconds() / 3600
-            
+
             # Calculate productivity based on 8 hours requirement
             # Simple formula: (actual_active_hours / 8) * 100
             productivity = min((active_hours / 8.0 * 100), 100)
-            
+
             total_hours += active_hours
 
             # Get detailed logs count
@@ -934,7 +934,7 @@ def get_daily_report(
                 "total_span_hours": round(total_span_hours, 2),
                 "productivity": f"{int(productivity)}%",
                 "first_activity": first_heartbeat,
-                "last_activity": last_heartbeat,
+                "last_activity": last_activity,
                 "heartbeats_count": len(heartbeats),
                 "logs_count": logs_count
             })
@@ -942,7 +942,7 @@ def get_daily_report(
     # Calculate work location statistics for the day
     office_employees_today = []
     remote_employees_today = []
-    
+
     for employee_data in report_data:
         # Get employee's location for this date
         latest_log_for_date = db.query(EmployeeLog).filter(
@@ -950,7 +950,7 @@ def get_daily_report(
             EmployeeLog.timestamp >= start_of_day,
             EmployeeLog.timestamp < end_of_day
         ).order_by(desc(EmployeeLog.timestamp)).first()
-        
+
         if latest_log_for_date and latest_log_for_date.location:
             try:
                 location_data = json.loads(latest_log_for_date.location)
@@ -967,10 +967,10 @@ def get_daily_report(
         else:
             remote_employees_today.append(employee_data)
             employee_data["work_location"] = "Remote Work"
-    
+
     office_hours = sum([emp["hours_worked"] for emp in office_employees_today])
     remote_hours = sum([emp["hours_worked"] for emp in remote_employees_today])
-    
+
     return {
         "date": target_date.isoformat(),
         "total_employees_active": len(report_data),
@@ -1265,7 +1265,7 @@ psutil>=5.9.0
             zip_file.writestr('agent.py', agent_content)
             zip_file.writestr('agent_requirements.txt', requirements_content)
 
-        # Add platform-specific instructions
+            # Add platform-specific instructions
             instructions = f"""
 # WFH Monitoring Agent Setup - {platform.title()}
 
@@ -1295,10 +1295,19 @@ psutil>=5.9.0
 - For service installation, use nssm or similar tools
 """
 
-                # Windows service installation script
+                # Windows installation script
                 windows_script = """@echo off
 echo Installing WFH Monitoring Agent for Windows...
 echo.
+
+echo Checking Python installation...
+python --version >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Python is not installed or not in PATH
+    echo Please install Python 3.7+ from https://python.org
+    pause
+    exit /b 1
+)
 
 echo Step 1: Installing Python dependencies...
 pip install -r agent_requirements.txt
@@ -1309,12 +1318,27 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo.
-echo Step 2: Agent ready to run...
-echo Run: python agent.py
-echo To run in background: start /b python agent.py
+echo Step 2: Testing agent connection...
+python agent.py --test
+if %ERRORLEVEL% NEQ 0 (
+    echo Warning: Agent test failed. Check your network connection.
+)
+
 echo.
-echo For Windows Service installation:
-echo Run as Administrator: install_service_windows.bat
+echo Installation complete!
+echo.
+echo To run the agent:
+echo   python agent.py
+echo.
+echo To install as Windows Service (Run as Administrator):
+echo   install_service_windows.bat
+echo.
+echo To start monitoring now:
+set /p START_NOW="Start monitoring now? (y/n): "
+if /i "%START_NOW%"=="y" (
+    echo Starting agent...
+    python agent.py
+)
 pause
 """
                 zip_file.writestr('install.bat', windows_script)

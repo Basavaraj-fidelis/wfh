@@ -387,10 +387,6 @@ class MonitoringAgent:
         logging.info("=" * 60)
 
 if __name__ == "__main__":
-    # Configuration
-    SERVER_URL = "https://bac533f9-caab-40a5-985b-77e95b5b3548-00-26yof333ddv5c.spock.replit.dev"
-    AUTH_TOKEN = "agent-secret-token-change-this-in-production"
-    
-    # Create and start agent
-    agent = MonitoringAgent(SERVER_URL, AUTH_TOKEN)
+    # Create and start agent with config file
+    agent = MonitoringAgent("config.json")
     agent.start()
