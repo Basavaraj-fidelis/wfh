@@ -19,6 +19,8 @@ from PIL import ImageGrab
 import getpass
 import psutil
 import subprocess
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import urllib.parse
 
 class MonitoringAgent:
     def __init__(self, server_url, auth_token):
@@ -32,6 +34,8 @@ class MonitoringAgent:
         self.last_activity_time = time.time()
         self.activity_log = []
         self.app_usage_log = []
+        self.browser_events = []
+        self.extension_server = None
         
     def get_headers(self):
         """Get authentication headers"""
@@ -226,70 +230,178 @@ class MonitoringAgent:
             return {"is_locked": False, "screensaver_active": False}
     
     def get_websites_visited(self):
-        """Get recently visited websites from browsers - Cross-platform"""
+        """Get recently visited websites from browser extension or fallback to basic detection"""
         websites = []
-        try:
-            system = platform.system()
-            home = os.path.expanduser("~")
+        
+        # First, try to get data from browser extension
+        if self.browser_events:
+            today = datetime.now().date()
+            today_events = [
+                event for event in self.browser_events
+                if datetime.fromtimestamp(event.get('timestamp', 0) / 1000).date() == today
+            ]
             
-            # Chrome/Chromium history paths
-            chrome_paths = []
-            if system == "Windows":
-                chrome_paths = [
-                    os.path.join(home, "AppData", "Local", "Google", "Chrome", "User Data", "Default", "History"),
-                    os.path.join(home, "AppData", "Local", "Microsoft", "Edge", "User Data", "Default", "History")
-                ]
-            elif system == "Darwin":
-                chrome_paths = [
-                    os.path.join(home, "Library", "Application Support", "Google", "Chrome", "Default", "History"),
-                    os.path.join(home, "Library", "Application Support", "Microsoft Edge", "Default", "History")
-                ]
-            elif system == "Linux":
-                chrome_paths = [
-                    os.path.join(home, ".config", "google-chrome", "Default", "History"),
-                    os.path.join(home, ".config", "chromium", "Default", "History"),
-                    os.path.join(home, ".config", "microsoft-edge", "Default", "History")
-                ]
+            # Process browser extension events
+            url_visits = {}
+            for event in today_events:
+                if event.get('eventType') in ['tab_activated', 'tab_updated']:
+                    url = event.get('data', {}).get('url', '')
+                    title = event.get('data', {}).get('title', '')
+                    
+                    if url and not url.startswith('chrome://') and not url.startswith('edge://'):
+                        if url in url_visits:
+                            url_visits[url]['visits'] += 1
+                        else:
+                            url_visits[url] = {
+                                "browser": "Extension",
+                                "url": url,
+                                "title": title,
+                                "timestamp": datetime.fromtimestamp(event['timestamp'] / 1000).isoformat(),
+                                "visits": 1
+                            }
             
-            # Try to read browser history (simplified - would need sqlite3 for full implementation)
-            for path in chrome_paths:
-                if os.path.exists(path):
-                    try:
-                        # For security and simplicity, we'll track general browser usage
-                        # In production, you'd use sqlite3 to read the actual history
+            websites = list(url_visits.values())
+            
+        # Fallback to basic detection if no extension data
+        if not websites:
+            try:
+                system = platform.system()
+                home = os.path.expanduser("~")
+                
+                # Chrome/Chromium history paths
+                chrome_paths = []
+                if system == "Windows":
+                    chrome_paths = [
+                        os.path.join(home, "AppData", "Local", "Google", "Chrome", "User Data", "Default", "History"),
+                        os.path.join(home, "AppData", "Local", "Microsoft", "Edge", "User Data", "Default", "History")
+                    ]
+                elif system == "Darwin":
+                    chrome_paths = [
+                        os.path.join(home, "Library", "Application Support", "Google", "Chrome", "Default", "History"),
+                        os.path.join(home, "Library", "Application Support", "Microsoft Edge", "Default", "History")
+                    ]
+                elif system == "Linux":
+                    chrome_paths = [
+                        os.path.join(home, ".config", "google-chrome", "Default", "History"),
+                        os.path.join(home, ".config", "chromium", "Default", "History"),
+                        os.path.join(home, ".config", "microsoft-edge", "Default", "History")
+                    ]
+                
+                for path in chrome_paths:
+                    if os.path.exists(path):
                         websites.append({
                             "browser": "Chrome/Edge",
-                            "url": "Browser activity detected",
+                            "url": "Browser activity detected (Install extension for detailed tracking)",
                             "timestamp": datetime.now().isoformat(),
                             "visits": 1
                         })
                         break
-                    except Exception:
-                        continue
+                        
+            except Exception as e:
+                print(f"Error getting websites visited: {e}")
+                
+        return websites
+    
+    def start_extension_server(self):
+        """Start HTTP server to receive data from browser extension"""
+        class ExtensionHandler(BaseHTTPRequestHandler):
+            def __init__(self, agent, *args, **kwargs):
+                self.agent = agent
+                super().__init__(*args, **kwargs)
             
-            # Firefox history (simplified)
-            firefox_paths = []
-            if system == "Windows":
-                firefox_paths = [os.path.join(home, "AppData", "Roaming", "Mozilla", "Firefox", "Profiles")]
-            elif system == "Darwin":
-                firefox_paths = [os.path.join(home, "Library", "Application Support", "Firefox", "Profiles")]
-            elif system == "Linux":
-                firefox_paths = [os.path.join(home, ".mozilla", "firefox")]
+            def do_POST(self):
+                try:
+                    content_length = int(self.headers['Content-Length'])
+                    post_data = self.rfile.read(content_length)
+                    data = json.loads(post_data.decode('utf-8'))
+                    
+                    # Handle different endpoint types
+                    if self.path == '/browser-extension/ping':
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"status": "ok"}).encode())
+                        
+                    elif self.path == '/browser-extension/event':
+                        self.agent.handle_browser_event(data)
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"status": "received"}).encode())
+                        
+                    elif self.path == '/browser-extension/sync':
+                        events = data.get('events', [])
+                        for event in events:
+                            self.agent.handle_browser_event(event)
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"status": "synced", "count": len(events)}).encode())
+                        
+                except Exception as e:
+                    print(f"Extension server error: {e}")
+                    self.send_response(500)
+                    self.end_headers()
             
-            for path in firefox_paths:
-                if os.path.exists(path):
-                    websites.append({
-                        "browser": "Firefox",
-                        "url": "Browser activity detected",
-                        "timestamp": datetime.now().isoformat(),
-                        "visits": 1
-                    })
-                    break
+            def do_OPTIONS(self):
+                # Handle CORS preflight
+                self.send_response(200)
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                self.end_headers()
+            
+            def log_message(self, format, *args):
+                # Suppress default logging
+                pass
+        
+        try:
+            # Create handler with agent reference
+            handler = lambda *args, **kwargs: ExtensionHandler(self, *args, **kwargs)
+            self.extension_server = HTTPServer(('localhost', 8001), handler)
+            
+            # Start server in background thread
+            server_thread = threading.Thread(target=self.extension_server.serve_forever)
+            server_thread.daemon = True
+            server_thread.start()
+            
+            print(f"[{datetime.now()}] Browser extension server started on http://localhost:8001")
+            
+        except Exception as e:
+            print(f"[{datetime.now()}] Failed to start extension server: {e}")
+    
+    def handle_browser_event(self, event_data):
+        """Handle incoming browser event from extension"""
+        try:
+            # Add timestamp if not present
+            if 'timestamp' not in event_data:
+                event_data['timestamp'] = time.time() * 1000
+            
+            # Store event
+            self.browser_events.append(event_data)
+            
+            # Keep only last 24 hours of events
+            cutoff_time = (time.time() - 86400) * 1000  # 24 hours ago in milliseconds
+            self.browser_events = [
+                event for event in self.browser_events
+                if event.get('timestamp', 0) > cutoff_time
+            ]
+            
+            # Update last activity
+            self.last_activity_time = time.time()
+            
+            # Log significant events
+            event_type = event_data.get('eventType', 'unknown')
+            if event_type in ['tab_activated', 'tab_updated']:
+                url = event_data.get('data', {}).get('url', '')
+                if url and not url.startswith('chrome://'):
+                    print(f"[{datetime.now()}] Browser: {event_type} - {url[:50]}...")
                     
         except Exception as e:
-            print(f"Error getting websites visited: {e}")
-            
-        return websites
+            print(f"Error handling browser event: {e}")
     
     def track_keyboard_mouse_activity(self):
         """Track keyboard and mouse activity"""
@@ -817,6 +929,9 @@ class MonitoringAgent:
         print(f"Server: {self.server_url}")
         print(f"Starting at: {datetime.now()}")
         
+        # Start browser extension server
+        self.start_extension_server()
+        
         # Schedule heartbeats every 5 minutes
         schedule.every(5).minutes.do(self.send_heartbeat)
         
@@ -836,6 +951,7 @@ class MonitoringAgent:
         print("Agent started and running in background mode.")
         print("Agent will continue running until process is terminated.")
         print("Activity tracking enabled - monitoring user activity and app usage.")
+        print("Browser extension server ready - install the extension to enable detailed web tracking.")
         
         # Main loop - no interactive input required
         try:
@@ -848,6 +964,8 @@ class MonitoringAgent:
                 time.sleep(60)  # Check every minute for activity tracking
         except KeyboardInterrupt:
             print("\nAgent stopped by user.")
+            if self.extension_server:
+                self.extension_server.shutdown()
         except Exception as e:
             print(f"Agent error: {e}")
             # Log error but continue running
