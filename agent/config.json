@@ -1,0 +1,34 @@
+{
+  "server": {
+    "url": "${WFH_SERVER_URL}",
+    "auth_token": "${WFH_AUTH_TOKEN}",
+    "timeout": 30,
+    "retry_attempts": 3,
+    "retry_delay": 5
+  },
+  "intervals": {
+    "heartbeat_minutes": 5,
+    "activity_collection_minutes": 30,
+    "data_sync_minutes": 10,
+    "scheduler_check_seconds": 30
+  },
+  "activitywatch": {
+    "base_url": "http://localhost:5600",
+    "timeout": 10,
+    "data_retention_hours": 24,
+    "bucket_patterns": {
+      "window": ["window", "app"],
+      "web": ["web", "browser", "chrome", "firefox"]
+    }
+  },
+  "local_storage": {
+    "database_name": "agent_data.db",
+    "cleanup_days": 7,
+    "max_screenshot_size_mb": 5
+  },
+  "logging": {
+    "level": "INFO",
+    "max_file_size_mb": 10,
+    "backup_count": 5
+  }
+}
