@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
@@ -24,14 +25,31 @@ interface LogEntry {
   public_ip: string;
   location: string;
   screenshot_path: string | null;
+  activity_data: string;
+}
+
+interface DayActivity {
+  date: string;
+  location: 'Office Bangalore' | 'Remote Work';
+  heartbeat_count: number;
+  active_time: number;
+  idle_time: number;
+  screen_lock_events: any[];
+  app_usage: Record<string, number>;
+  websites_visited: any[];
+  screenshots: LogEntry[];
+  working_hours: number;
+  productivity: string;
 }
 
 interface ViewState {
-  currentView: 'list' | 'employee-detail';
+  currentView: 'list' | 'employee-detail' | 'day-detail';
   selectedEmployee: string | null;
+  selectedDate: string | null;
   employeeData: {
     logs: LogEntry[];
     stats: any;
+    dailyActivities: DayActivity[];
   } | null;
 }
 
@@ -53,9 +71,10 @@ const EmployeesSection: React.FC = () => {
   const [viewState, setViewState] = useState<ViewState>({
     currentView: 'list',
     selectedEmployee: null,
+    selectedDate: null,
     employeeData: null
   });
-  const [loading, setLoading] = useState(false); // Corrected initialization for loading state
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     loadEmployees();
@@ -104,15 +123,21 @@ const EmployeesSection: React.FC = () => {
   const viewEmployeeDetail = async (username: string) => {
     setLoading(true);
     try {
-      const response = await axios.get(`/api/admin/employees/${username}/logs?days=7`);
+      // Get logs for the last 30 days to build calendar
+      const response = await axios.get(`/api/admin/employees/${username}/logs?days=30`);
       const employee = employees.find(emp => emp.username === username);
+
+      // Process logs to create daily activities
+      const dailyActivities = await processDailyActivities(username, response.data.logs || []);
 
       setViewState({
         currentView: 'employee-detail',
         selectedEmployee: username,
+        selectedDate: null,
         employeeData: {
           logs: response.data.logs || [],
-          stats: employee || {}
+          stats: employee || {},
+          dailyActivities
         }
       });
     } catch (error) {
@@ -120,102 +145,158 @@ const EmployeesSection: React.FC = () => {
       setViewState({
         currentView: 'employee-detail',
         selectedEmployee: username,
+        selectedDate: null,
         employeeData: {
           logs: [],
-          stats: employees.find(emp => emp.username === username) || {}
+          stats: employees.find(emp => emp.username === username) || {},
+          dailyActivities: []
         }
       });
     }
     setLoading(false);
   };
 
+  const processDailyActivities = async (username: string, logs: LogEntry[]): Promise<DayActivity[]> => {
+    const dailyMap = new Map<string, DayActivity>();
+
+    // Process logs by date
+    logs.forEach(log => {
+      const date = new Date(log.timestamp).toISOString().split('T')[0];
+      
+      if (!dailyMap.has(date)) {
+        dailyMap.set(date, {
+          date,
+          location: 'Remote Work',
+          heartbeat_count: 0,
+          active_time: 0,
+          idle_time: 0,
+          screen_lock_events: [],
+          app_usage: {},
+          websites_visited: [],
+          screenshots: [],
+          working_hours: 0,
+          productivity: '0%'
+        });
+      }
+
+      const dayActivity = dailyMap.get(date)!;
+      
+      // Determine location
+      try {
+        const locationData = JSON.parse(log.location);
+        if (locationData.ip === "14.96.131.106") {
+          dayActivity.location = 'Office Bangalore';
+        }
+      } catch (e) {}
+
+      // Parse activity data
+      try {
+        const activityData = JSON.parse(log.activity_data || '{}');
+        
+        if (activityData.heartbeat_count) {
+          dayActivity.heartbeat_count += activityData.heartbeat_count;
+        }
+        
+        if (activityData.total_active_time) {
+          dayActivity.active_time += activityData.total_active_time;
+        }
+        
+        if (activityData.total_idle_time) {
+          dayActivity.idle_time += activityData.total_idle_time;
+        }
+        
+        if (activityData.app_usage) {
+          Object.entries(activityData.app_usage).forEach(([app, usage]) => {
+            dayActivity.app_usage[app] = (dayActivity.app_usage[app] || 0) + (usage as number);
+          });
+        }
+        
+        if (activityData.websites_visited) {
+          dayActivity.websites_visited.push(...activityData.websites_visited);
+        }
+        
+        if (activityData.screen_lock_events) {
+          dayActivity.screen_lock_events.push(...activityData.screen_lock_events);
+        }
+      } catch (e) {}
+
+      // Add screenshot
+      if (log.screenshot_path) {
+        dayActivity.screenshots.push(log);
+      }
+    });
+
+    // Get working hours for each day
+    for (const [date, activity] of dailyMap.entries()) {
+      try {
+        const workingHoursResponse = await axios.get(`/api/admin/employees/${username}/working-hours?date=${date}`);
+        activity.working_hours = workingHoursResponse.data.total_hours || 0;
+        const productivityPercentage = Math.min((activity.working_hours / 8.0 * 100), 100);
+        activity.productivity = `${Math.round(productivityPercentage)}%`;
+      } catch (e) {
+        console.error('Error getting working hours for date:', date, e);
+      }
+    }
+
+    return Array.from(dailyMap.values()).sort((a, b) => b.date.localeCompare(a.date));
+  };
+
+  const viewDayDetail = (date: string) => {
+    setViewState(prev => ({
+      ...prev,
+      currentView: 'day-detail',
+      selectedDate: date
+    }));
+  };
+
+  const backToEmployeeDetail = () => {
+    setViewState(prev => ({
+      ...prev,
+      currentView: 'employee-detail',
+      selectedDate: null
+    }));
+  };
+
   const backToList = () => {
     setViewState({
       currentView: 'list',
       selectedEmployee: null,
+      selectedDate: null,
       employeeData: null
     });
   };
 
   const CircularProgress: React.FC<{ percentage: number; label: string; }> = ({ percentage, label }) => {
-    const circumference = 2 * Math.PI * 45; // radius = 45
+    const circumference = 2 * Math.PI * 45;
     const strokeDasharray = circumference;
     const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
     return (
       <div className="circular-progress-container">
         <svg width="120" height="120" className="circular-progress">
-          {/* Background circle */}
+          <circle cx="60" cy="60" r="45" stroke="#f0f0f0" strokeWidth="8" fill="transparent" />
           <circle
-            cx="60"
-            cy="60"
-            r="45"
-            stroke="#f0f0f0"
-            strokeWidth="8"
-            fill="transparent"
+            cx="60" cy="60" r="45" stroke="#ff9999" strokeWidth="8" fill="transparent"
+            strokeDasharray={strokeDasharray} strokeDashoffset={strokeDashoffset}
+            strokeLinecap="round" transform="rotate(-90 60 60)" className="progress-circle"
           />
-
-          {/* Working time circle (pink) */}
           <circle
-            cx="60"
-            cy="60"
-            r="45"
-            stroke="#ff9999"
-            strokeWidth="8"
-            fill="transparent"
-            strokeDasharray={strokeDasharray}
-            strokeDashoffset={strokeDashoffset}
-            strokeLinecap="round"
-            transform="rotate(-90 60 60)"
-            className="progress-circle"
-          />
-
-          {/* Productive time circle (purple) */}
-          <circle
-            cx="60"
-            cy="60"
-            r="35"
-            stroke="#9966ff"
-            strokeWidth="6"
-            fill="transparent"
+            cx="60" cy="60" r="35" stroke="#9966ff" strokeWidth="6" fill="transparent"
             strokeDasharray={2 * Math.PI * 35}
             strokeDashoffset={2 * Math.PI * 35 - (percentage * 0.8 / 100) * 2 * Math.PI * 35}
-            strokeLinecap="round"
-            transform="rotate(-90 60 60)"
-            className="progress-circle"
+            strokeLinecap="round" transform="rotate(-90 60 60)" className="progress-circle"
           />
-
-          {/* Computer activity circle (mint) */}
           <circle
-            cx="60"
-            cy="60"
-            r="25"
-            stroke="#66ffcc"
-            strokeWidth="4"
-            fill="transparent"
+            cx="60" cy="60" r="25" stroke="#66ffcc" strokeWidth="4" fill="transparent"
             strokeDasharray={2 * Math.PI * 25}
             strokeDashoffset={2 * Math.PI * 25 - (percentage * 0.9 / 100) * 2 * Math.PI * 25}
-            strokeLinecap="round"
-            transform="rotate(-90 60 60)"
-            className="progress-circle"
+            strokeLinecap="round" transform="rotate(-90 60 60)" className="progress-circle"
           />
-
-          {/* Center text */}
-          <text
-            x="60"
-            y="65"
-            textAnchor="middle"
-            className="progress-percentage"
-            fontSize="18"
-            fontWeight="bold"
-            fill="#333"
-          >
+          <text x="60" y="65" textAnchor="middle" className="progress-percentage" fontSize="18" fontWeight="bold" fill="#333">
             {percentage}%
           </text>
         </svg>
-
         <h3 className="progress-label">{label}</h3>
-
         <div className="progress-legend">
           <div className="legend-item">
             <span className="legend-color" style={{backgroundColor: '#ff9999'}}></span>
@@ -234,57 +315,217 @@ const EmployeesSection: React.FC = () => {
     );
   };
 
-  const renderEmployeeDetails = (employee: any) => {
-    if (!employee) return null;
+  const renderDayDetailView = () => {
+    if (!viewState.employeeData || !viewState.selectedDate) return null;
+
+    const dayActivity = viewState.employeeData.dailyActivities.find(
+      day => day.date === viewState.selectedDate
+    );
+
+    if (!dayActivity) return <div>No data for selected date</div>;
 
     return (
-      <div className="employee-details-modal">
-        <div className="modal-overlay" onClick={() => setViewState(prevState => ({...prevState, currentView: 'list', selectedEmployee: null, employeeData: null }))}></div>
-        <div className="modal-content">
-          <div className="details-header">
-            <h4>Employee Details: {employee.username}</h4>
-            <button className="close-btn" onClick={() => setViewState(prevState => ({...prevState, currentView: 'list', selectedEmployee: null, employeeData: null }))}>×</button>
+      <div className="day-detail-page">
+        <div className="day-detail-header">
+          <h1 className="day-detail-title">
+            📅 {viewState.selectedEmployee} - {new Date(viewState.selectedDate!).toLocaleDateString()}
+          </h1>
+          <button className="back-btn" onClick={backToEmployeeDetail}>
+            ← Back to Calendar
+          </button>
+        </div>
+
+        <div className="day-detail-content">
+          {/* Day Summary Stats */}
+          <div className="day-stats-grid">
+            <div className="stat-card">
+              <h4>Work Location</h4>
+              <p className="stat-value" style={{ color: dayActivity.location === 'Office Bangalore' ? '#007bff' : '#28a745' }}>
+                {dayActivity.location === 'Office Bangalore' ? '🏢 Office Bangalore' : '🏠 Remote Work'}
+              </p>
+            </div>
+            <div className="stat-card">
+              <h4>Heartbeat Count</h4>
+              <p className="stat-value">{dayActivity.heartbeat_count}</p>
+            </div>
+            <div className="stat-card">
+              <h4>Active Time</h4>
+              <p className="stat-value">{Math.round(dayActivity.active_time)} minutes</p>
+            </div>
+            <div className="stat-card">
+              <h4>Idle Time</h4>
+              <p className="stat-value">{Math.round(dayActivity.idle_time)} minutes</p>
+            </div>
+            <div className="stat-card">
+              <h4>Working Hours</h4>
+              <p className="stat-value">{dayActivity.working_hours.toFixed(1)}h</p>
+            </div>
+            <div className="stat-card">
+              <h4>Productivity</h4>
+              <p className="stat-value">{dayActivity.productivity}</p>
+            </div>
           </div>
 
-          <div className="details-content">
-            <div className="detail-grid">
-              <div className="detail-item">
-                <label>Employee ID:</label>
-                <span>{employee.id}</span>
-              </div>
-              <div className="detail-item">
-                <label>Status:</label>
-                <span className={`status ${employee.status}`}>{employee.status}</span>
-              </div>
-              <div className="detail-item">
-                <label>Location:</label>
-                <span>{employee.location}</span>
-              </div>
-              <div className="detail-item">
-                <label>Working Hours:</label>
-                <span>{employee.working_hours}</span>
-              </div>
-              <div className="detail-item">
-                <label>Productivity:</label>
-                <span>{employee.productivity}</span>
-              </div>
-              <div className="detail-item">
-                <label>Start Time:</label>
-                <span>{employee.start_time}</span>
-              </div>
-              <div className="detail-item">
-                <label>End Time:</label>
-                <span>{employee.end_time}</span>
-              </div>
-              <div className="detail-item">
-                <label>IP Address:</label>
-                <span>{employee.public_ip}</span>
-              </div>
-              <div className="detail-item">
-                <label>Last Seen:</label>
-                <span>{employee.last_seen ? new Date(employee.last_seen).toLocaleString() : 'N/A'}</span>
-              </div>
+          {/* Application Usage Chart */}
+          <div className="chart-section">
+            <h3>📱 Application Usage</h3>
+            <div className="app-usage-chart">
+              {Object.entries(dayActivity.app_usage).length > 0 ? (
+                Object.entries(dayActivity.app_usage)
+                  .sort(([,a], [,b]) => b - a)
+                  .slice(0, 10)
+                  .map(([app, usage], index) => (
+                    <div key={app} className="app-usage-bar">
+                      <div className="app-name">{app}</div>
+                      <div className="usage-bar">
+                        <div 
+                          className="usage-fill"
+                          style={{ 
+                            width: `${(usage / Math.max(...Object.values(dayActivity.app_usage))) * 100}%`,
+                            backgroundColor: `hsl(${index * 30}, 70%, 60%)`
+                          }}
+                        ></div>
+                      </div>
+                      <div className="usage-time">{usage} min</div>
+                    </div>
+                  ))
+              ) : (
+                <p style={{ textAlign: 'center', color: '#666' }}>No application usage data available</p>
+              )}
             </div>
+          </div>
+
+          {/* Websites Visited Chart */}
+          <div className="chart-section">
+            <h3>🌐 Websites Visited</h3>
+            <div className="websites-chart">
+              {dayActivity.websites_visited.length > 0 ? (
+                dayActivity.websites_visited.map((website, index) => (
+                  <div key={index} className="website-entry">
+                    <div className="website-info">
+                      <span className="website-browser">{website.browser}</span>
+                      <span className="website-url">{website.url}</span>
+                      <span className="website-time">{new Date(website.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p style={{ textAlign: 'center', color: '#666' }}>No website data available</p>
+              )}
+            </div>
+          </div>
+
+          {/* Screen Lock Events */}
+          <div className="chart-section">
+            <h3>🔒 Screen Lock Events</h3>
+            <div className="lock-events">
+              {dayActivity.screen_lock_events.length > 0 ? (
+                dayActivity.screen_lock_events.map((event, index) => (
+                  <div key={index} className="lock-event">
+                    <span className={`lock-status ${event.is_locked ? 'locked' : 'unlocked'}`}>
+                      {event.is_locked ? '🔒 Locked' : '🔓 Unlocked'}
+                    </span>
+                    {event.screensaver_active && <span className="screensaver">💻 Screensaver</span>}
+                  </div>
+                ))
+              ) : (
+                <p style={{ textAlign: 'center', color: '#666' }}>No screen lock events recorded</p>
+              )}
+            </div>
+          </div>
+
+          {/* Screenshots */}
+          <div className="screenshots-section">
+            <h3>📷 Screenshots ({dayActivity.screenshots.length})</h3>
+            <div className="screenshots-grid">
+              {dayActivity.screenshots.map((screenshot, index) => (
+                <div key={index} className="screenshot-item">
+                  <div className="screenshot-time">
+                    {new Date(screenshot.timestamp).toLocaleTimeString()}
+                  </div>
+                  {screenshot.screenshot_path ? (
+                    <img 
+                      src={`/api/screenshots/${screenshot.screenshot_path.split('/').pop()}`}
+                      alt="Screenshot"
+                      className="screenshot-thumbnail"
+                      onClick={() => window.open(`/api/screenshots/${screenshot.screenshot_path.split('/').pop()}`, '_blank')}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const container = target.parentElement;
+                        if (container) {
+                          container.innerHTML = '<div class="screenshot-error">📷 Screenshot not available</div>';
+                        }
+                      }}
+                    />
+                  ) : (
+                    <div className="screenshot-error">📷 No screenshot</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderCalendarView = () => {
+    if (!viewState.employeeData) return null;
+
+    const { dailyActivities } = viewState.employeeData;
+    
+    // Generate calendar for last 30 days
+    const today = new Date();
+    const calendarDays = [];
+    
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const activity = dailyActivities.find(day => day.date === dateStr);
+      
+      calendarDays.push({
+        date: dateStr,
+        displayDate: date,
+        activity: activity || null
+      });
+    }
+
+    return (
+      <div className="calendar-section">
+        <h3>📅 Activity Calendar (Last 30 Days)</h3>
+        <div className="calendar-grid">
+          {calendarDays.map(({ date, displayDate, activity }) => (
+            <div 
+              key={date}
+              className={`calendar-day ${activity ? 'has-activity' : 'no-activity'}`}
+              onClick={() => activity && viewDayDetail(date)}
+              style={{ cursor: activity ? 'pointer' : 'default' }}
+            >
+              <div className="calendar-date">{displayDate.getDate()}</div>
+              <div className="calendar-month">{displayDate.toLocaleDateString('en', { month: 'short' })}</div>
+              {activity && (
+                <div className="calendar-info">
+                  <div className={`location-indicator ${activity.location === 'Office Bangalore' ? 'office' : 'remote'}`}>
+                    {activity.location === 'Office Bangalore' ? '🏢' : '🏠'}
+                  </div>
+                  <div className="working-hours">{activity.working_hours.toFixed(1)}h</div>
+                  <div className="productivity">{activity.productivity}</div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="calendar-legend">
+          <div className="legend-item">
+            <span className="legend-dot office"></span>
+            <span>🏢 Office</span>
+          </div>
+          <div className="legend-item">
+            <span className="legend-dot remote"></span>
+            <span>🏠 Remote</span>
           </div>
         </div>
       </div>
@@ -294,8 +535,6 @@ const EmployeesSection: React.FC = () => {
   const renderEmployeeDetailView = () => {
     const employee = employees.find(emp => emp.username === viewState.selectedEmployee);
     if (!employee || !viewState.employeeData) return null;
-
-    const { logs } = viewState.employeeData;
 
     return (
       <div className="employee-detail-page">
@@ -318,15 +557,15 @@ const EmployeesSection: React.FC = () => {
               </p>
             </div>
             <div className="stat-card">
-              <h4>Working Hours</h4>
+              <h4>Working Hours Today</h4>
               <p className="stat-value">{employee.working_hours || '0h 0m'}</p>
             </div>
             <div className="stat-card">
-              <h4>Productivity</h4>
+              <h4>Productivity Today</h4>
               <p className="stat-value">{employee.productivity || '0%'}</p>
             </div>
             <div className="stat-card">
-              <h4>Work Location</h4>
+              <h4>Current Location</h4>
               <p className="stat-value" style={{ 
                 color: employee.location === 'Office Bangalore' ? '#007bff' : '#28a745'
               }}>
@@ -345,87 +584,8 @@ const EmployeesSection: React.FC = () => {
             </div>
           </div>
 
-          {/* Activity Logs and Screenshots */}
-          <div className="logs-section">
-            <div className="logs-header">
-              <h3>📊 Activity Logs & Screenshots ({logs.length} entries)</h3>
-            </div>
-            <div className="logs-content">
-              {logs.length === 0 ? (
-                <p style={{ textAlign: 'center', color: '#666', padding: '40px' }}>
-                  No activity logs available for this employee.
-                </p>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={index} className="log-entry">
-                    <div className="log-details">
-                      <div className="log-detail-item">
-                        <span className="log-detail-label">📅 Timestamp:</span>
-                        <span className="log-detail-value">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="log-detail-item">
-                        <span className="log-detail-label">💻 Hostname:</span>
-                        <span className="log-detail-value">{log.hostname}</span>
-                      </div>
-                      <div className="log-detail-item">
-                        <span className="log-detail-label">🔗 Local IP:</span>
-                        <span className="log-detail-value">{log.local_ip}</span>
-                      </div>
-                      <div className="log-detail-item">
-                        <span className="log-detail-label">🌐 Public IP:</span>
-                        <span className="log-detail-value">{log.public_ip}</span>
-                      </div>
-                      <div className="log-detail-item">
-                        <span className="log-detail-label">📍 Location:</span>
-                        <span className="log-detail-value">
-                          {log.public_ip === '14.96.131.106' ? '🏢 Office Bangalore' : '🏠 Remote Work'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="screenshot-container">
-                      {log.screenshot_path && log.screenshot_path.trim() !== '' ? (
-                        <>
-                          <img 
-                            src={`/api/screenshots/${log.screenshot_path.split('/').pop()}`}
-                            alt="Employee Screenshot"
-                            className="screenshot-preview"
-                            onClick={() => window.open(`/api/screenshots/${log.screenshot_path.split('/').pop()}`, '_blank')}
-                            onError={(e) => {
-                              const target = e.target as HTMLImageElement;
-                              target.style.display = 'none';
-                              const container = target.parentElement;
-                              if (container) {
-                                container.innerHTML = '<div style="width: 100%; height: 200px; background: #f8f9fa; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #666;">📷 Screenshot not available</div>';
-                              }
-                            }}
-                          />
-                          <div className="screenshot-label">
-                            Click to view full size
-                          </div>
-                        </>
-                      ) : (
-                        <div style={{ 
-                          width: '100%', 
-                          height: '200px', 
-                          background: '#f8f9fa',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: '8px',
-                          color: '#666'
-                        }}>
-                          📷 No screenshot available
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+          {/* Calendar View */}
+          {renderCalendarView()}
         </div>
       </div>
     );
@@ -585,6 +745,10 @@ const EmployeesSection: React.FC = () => {
   };
 
   // Main return statement
+  if (viewState.currentView === 'day-detail') {
+    return renderDayDetailView();
+  }
+
   if (viewState.currentView === 'employee-detail') {
     return renderEmployeeDetailView();
   }

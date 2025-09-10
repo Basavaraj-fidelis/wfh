@@ -170,6 +170,151 @@ class MonitoringAgent:
             print(f"Error getting idle time: {e}")
             return 0
     
+    def get_screen_lock_status(self):
+        """Check if screen is locked - Cross-platform"""
+        try:
+            system = platform.system()
+            
+            if system == "Windows":
+                import ctypes
+                user32 = ctypes.windll.user32
+                
+                # Check if screen saver is running
+                is_screensaver = user32.SystemParametersInfoW(0x0072, 0, None, 0)  # SPI_GETSCREENSAVERRUNNING
+                
+                # Check if workstation is locked
+                hdesk = user32.OpenDesktopW("default", 0, False, 0x0100)  # DESKTOP_SWITCHDESKTOP
+                is_locked = hdesk == 0
+                
+                return {
+                    "is_locked": is_locked or is_screensaver,
+                    "screensaver_active": is_screensaver
+                }
+                
+            elif system == "Darwin":  # macOS
+                try:
+                    # Check if screen is locked using Quartz
+                    import Quartz
+                    session_dict = Quartz.CGSessionCopyCurrentDictionary()
+                    if session_dict:
+                        is_locked = session_dict.get('CGSSessionScreenIsLocked', False)
+                        return {"is_locked": is_locked, "screensaver_active": False}
+                except ImportError:
+                    pass
+                    
+            elif system == "Linux":
+                try:
+                    # Check various Linux screen lock mechanisms
+                    # GNOME screensaver
+                    result = subprocess.run(['gnome-screensaver-command', '--query'], 
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and 'is active' in result.stdout:
+                        return {"is_locked": True, "screensaver_active": True}
+                    
+                    # Check if display is off
+                    result = subprocess.run(['xset', 'q'], capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0 and 'Monitor is Off' in result.stdout:
+                        return {"is_locked": True, "screensaver_active": True}
+                        
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+                    pass
+                    
+            return {"is_locked": False, "screensaver_active": False}
+            
+        except Exception as e:
+            print(f"Error checking screen lock status: {e}")
+            return {"is_locked": False, "screensaver_active": False}
+    
+    def get_websites_visited(self):
+        """Get recently visited websites from browsers - Cross-platform"""
+        websites = []
+        try:
+            system = platform.system()
+            home = os.path.expanduser("~")
+            
+            # Chrome/Chromium history paths
+            chrome_paths = []
+            if system == "Windows":
+                chrome_paths = [
+                    os.path.join(home, "AppData", "Local", "Google", "Chrome", "User Data", "Default", "History"),
+                    os.path.join(home, "AppData", "Local", "Microsoft", "Edge", "User Data", "Default", "History")
+                ]
+            elif system == "Darwin":
+                chrome_paths = [
+                    os.path.join(home, "Library", "Application Support", "Google", "Chrome", "Default", "History"),
+                    os.path.join(home, "Library", "Application Support", "Microsoft Edge", "Default", "History")
+                ]
+            elif system == "Linux":
+                chrome_paths = [
+                    os.path.join(home, ".config", "google-chrome", "Default", "History"),
+                    os.path.join(home, ".config", "chromium", "Default", "History"),
+                    os.path.join(home, ".config", "microsoft-edge", "Default", "History")
+                ]
+            
+            # Try to read browser history (simplified - would need sqlite3 for full implementation)
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    try:
+                        # For security and simplicity, we'll track general browser usage
+                        # In production, you'd use sqlite3 to read the actual history
+                        websites.append({
+                            "browser": "Chrome/Edge",
+                            "url": "Browser activity detected",
+                            "timestamp": datetime.now().isoformat(),
+                            "visits": 1
+                        })
+                        break
+                    except Exception:
+                        continue
+            
+            # Firefox history (simplified)
+            firefox_paths = []
+            if system == "Windows":
+                firefox_paths = [os.path.join(home, "AppData", "Roaming", "Mozilla", "Firefox", "Profiles")]
+            elif system == "Darwin":
+                firefox_paths = [os.path.join(home, "Library", "Application Support", "Firefox", "Profiles")]
+            elif system == "Linux":
+                firefox_paths = [os.path.join(home, ".mozilla", "firefox")]
+            
+            for path in firefox_paths:
+                if os.path.exists(path):
+                    websites.append({
+                        "browser": "Firefox",
+                        "url": "Browser activity detected",
+                        "timestamp": datetime.now().isoformat(),
+                        "visits": 1
+                    })
+                    break
+                    
+        except Exception as e:
+            print(f"Error getting websites visited: {e}")
+            
+        return websites
+    
+    def track_keyboard_mouse_activity(self):
+        """Track keyboard and mouse activity"""
+        try:
+            # Get current idle time
+            idle_time = self.get_idle_time()
+            
+            # Consider active if idle time is less than 30 seconds
+            is_active = idle_time < 30
+            
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "idle_time_seconds": idle_time,
+                "is_active": is_active,
+                "activity_type": "keyboard_mouse"
+            }
+        except Exception as e:
+            print(f"Error tracking keyboard/mouse activity: {e}")
+            return {
+                "timestamp": datetime.now().isoformat(),
+                "idle_time_seconds": 0,
+                "is_active": False,
+                "activity_type": "keyboard_mouse"
+            }
+    
     def get_active_window_info(self):
         """Get information about the currently active window/application"""
         try:
@@ -331,7 +476,7 @@ class MonitoringAgent:
             print(f"Error tracking activity: {e}")
     
     def get_activity_summary(self):
-        """Generate activity summary for the current day"""
+        """Generate comprehensive activity summary for the current day"""
         try:
             today = datetime.now().date()
             today_entries = [
@@ -344,7 +489,11 @@ class MonitoringAgent:
                     "total_active_time": 0,
                     "total_idle_time": 0,
                     "activity_rate": 0,
-                    "app_usage": {}
+                    "app_usage": {},
+                    "websites_visited": [],
+                    "screen_lock_events": [],
+                    "keyboard_mouse_activity": [],
+                    "heartbeat_count": 0
                 }
             
             # Calculate active vs idle time
@@ -371,11 +520,25 @@ class MonitoringAgent:
             # Convert counts to minutes (assuming 1 minute intervals)
             app_usage = {app: count * 1 for app, count in app_usage.items()}
             
+            # Get websites visited
+            websites = self.get_websites_visited()
+            
+            # Get screen lock status
+            screen_status = self.get_screen_lock_status()
+            
+            # Get keyboard/mouse activity
+            kb_mouse_activity = self.track_keyboard_mouse_activity()
+            
             return {
                 "total_active_time": total_active_time,
                 "total_idle_time": total_idle_time,
                 "activity_rate": round(activity_rate, 2),
-                "app_usage": app_usage
+                "app_usage": app_usage,
+                "websites_visited": websites,
+                "screen_lock_events": [screen_status],
+                "keyboard_mouse_activity": [kb_mouse_activity],
+                "heartbeat_count": len(today_entries),
+                "last_updated": datetime.now().isoformat()
             }
             
         except Exception as e:
@@ -384,7 +547,11 @@ class MonitoringAgent:
                 "total_active_time": 0,
                 "total_idle_time": 0,
                 "activity_rate": 0,
-                "app_usage": {}
+                "app_usage": {},
+                "websites_visited": [],
+                "screen_lock_events": [],
+                "keyboard_mouse_activity": [],
+                "heartbeat_count": 0
             }
     
     def get_location(self, public_ip):

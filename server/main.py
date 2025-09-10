@@ -789,6 +789,21 @@ def get_range_report(
 def test_download():
     return {"message": "Download endpoint works"}
 
+# Screenshot serving endpoint
+@app.get("/api/screenshots/{filename}")
+def serve_screenshot(filename: str):
+    """Serve screenshot files"""
+    try:
+        screenshot_path = os.path.join(screenshots_dir, filename)
+        if os.path.exists(screenshot_path):
+            from fastapi.responses import FileResponse
+            return FileResponse(screenshot_path, media_type="image/png")
+        else:
+            raise HTTPException(status_code=404, detail="Screenshot not found")
+    except Exception as e:
+        print(f"Error serving screenshot {filename}: {e}")
+        raise HTTPException(status_code=500, detail="Error serving screenshot")
+
 # Agent download endpoints
 @app.get("/api/download/agent/{platform}")
 def download_agent(platform: str, admin=Depends(verify_admin_token)):
