@@ -32,6 +32,7 @@ const DashboardSection: React.FC = () => {
       setError(null);
       const token = localStorage.getItem('token');
       if (!token) {
+        setError('No authentication token found. Please login again.');
         logout();
         return;
       }
@@ -39,19 +40,29 @@ const DashboardSection: React.FC = () => {
       const response = await axios.get('/api/admin/employees/status', {
         headers: {
           'Authorization': `Bearer ${token}`
-        }
+        },
+        timeout: 10000 // 10 second timeout
       });
       setEmployees(response.data.employees || []);
     } catch (error: any) {
       console.error('Failed to load dashboard data:', error);
-      if (error.response?.status === 401) {
+      
+      if (error.code === 'ECONNABORTED') {
+        setError('Request timed out. Please check your connection and try again.');
+      } else if (error.response?.status === 401) {
+        setError('Authentication expired. Please login again.');
+        localStorage.removeItem('token');
         logout();
       } else if (error.response?.status === 403) {
         setError('Access denied. Please check your authentication.');
       } else if (error.response?.status === 500) {
-        setError('Server error. Database might be initializing. Please wait a moment and try again.');
+        setError('Server error. The database might be initializing or there is a server issue. Please wait a moment and try again.');
+      } else if (error.response?.status === 404) {
+        setError('API endpoint not found. Please check if the server is running properly.');
+      } else if (!error.response) {
+        setError('Unable to connect to server. Please check if the backend is running.');
       } else {
-        setError('Failed to load dashboard data. Please check your network connection.');
+        setError(`Server error (${error.response?.status}): ${error.response?.data?.detail || 'Unknown error'}`);
       }
     } finally {
       setLoading(false);

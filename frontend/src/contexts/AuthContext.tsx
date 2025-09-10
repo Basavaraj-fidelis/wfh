@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import axios from 'axios';
 
@@ -48,16 +47,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.data.access_token) {
         const newToken = response.data.access_token;
-        
+
         // Set the token first
         localStorage.setItem('adminToken', newToken);
-        
+
         // Update axios defaults immediately for this session
         axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-        
+
         // Then update state
         setToken(newToken);
-        
+
         return true;
       }
       return false;

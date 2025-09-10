@@ -126,7 +126,13 @@ class AdminUser(Base):
 def get_db():
     db = SessionLocal()
     try:
+        # Test the connection
+        db.execute("SELECT 1")
         yield db
+    except Exception as e:
+        print(f"Database connection error: {e}")
+        db.rollback()
+        raise
     finally:
         db.close()
 
