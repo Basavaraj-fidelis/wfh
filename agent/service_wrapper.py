@@ -1,108 +1,165 @@
 
 #!/usr/bin/env python3
 """
-Windows Service Wrapper for WFH Monitoring Agent
-This allows the agent to run as a proper Windows service
+Service Wrapper for WFH Monitoring Agent v2.0
+Cross-platform service wrapper with configuration management and better error handling
 """
 
 import sys
 import time
 import logging
+import os
 from pathlib import Path
 
-# Configure logging for service
-log_file = Path(__file__).parent / "service.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+def setup_service_logging():
+    """Setup logging specifically for service mode"""
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    log_file = log_dir / "service.log"
+    
+    # Configure logging with rotation
+    try:
+        from logging.handlers import RotatingFileHandler
+        
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding='utf-8'
+        )
+        
+        console_handler = logging.StreamHandler(sys.stdout)
+        
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        
+        file_handler.setFormatter(formatter)
+        console_handler.setFormatter(formatter)
+        
+        # Configure root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.INFO)
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
+        
+    except ImportError:
+        # Fallback for systems without RotatingFileHandler
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file, encoding='utf-8'),
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
 
 def run_as_service():
-    """Run the agent in service mode"""
+    """Run the agent in service mode with proper error handling and recovery"""
+    setup_service_logging()
+    
+    restart_count = 0
+    max_restarts = 10
+    restart_delay = 30
+    
+    while restart_count < max_restarts:
+        try:
+            logging.info("=" * 60)
+            logging.info(f"Starting WFH Monitoring Agent Service (attempt {restart_count + 1})")
+            logging.info("=" * 60)
+            
+            # Import the modular agent
+            from agent import MonitoringAgent
+            
+            # Initialize with config file (will use environment variables from config)
+            config_file = "config.json"
+            config_path = Path(__file__).parent / config_file
+            
+            if not config_path.exists():
+                logging.warning(f"Config file {config_file} not found, creating default...")
+                # The ConfigManager will create a default config using environment variables
+                
+            # Create and start agent
+            agent = MonitoringAgent(config_file)
+            
+            # Start agent (this will block until stopped)
+            success = agent.start()
+            
+            if success:
+                logging.info("Agent stopped gracefully")
+                break  # Graceful shutdown, don't restart
+            else:
+                logging.error("Agent failed to start properly")
+                restart_count += 1
+                
+        except KeyboardInterrupt:
+            logging.info("Service stopped by user (Ctrl+C)")
+            break
+            
+        except ImportError as e:
+            logging.error(f"Import error: {e}")
+            logging.error("Please ensure all required modules are installed:")
+            logging.error("pip install -r agent_requirements.txt")
+            break  # Don't restart for import errors
+            
+        except Exception as e:
+            restart_count += 1
+            logging.error(f"Service error (attempt {restart_count}/{max_restarts}): {e}")
+            
+            import traceback
+            logging.error(f"Full traceback:\n{traceback.format_exc()}")
+            
+            if restart_count < max_restarts:
+                logging.info(f"Restarting service in {restart_delay} seconds...")
+                time.sleep(restart_delay)
+                
+                # Increase delay for subsequent restarts (exponential backoff)
+                restart_delay = min(300, restart_delay * 1.5)  # Max 5 minutes
+            else:
+                logging.error(f"Maximum restart attempts ({max_restarts}) reached, stopping service")
+                break
+                
+    logging.info("Service wrapper exiting")
+
+def main():
+    """Main entry point with platform detection"""
     try:
-        # Import and run the main agent
-        from agent import MonitoringAgent
+        # Check for required environment variables
+        required_env_vars = ["WFH_SERVER_URL", "WFH_AUTH_TOKEN"]
+        missing_vars = []
         
-        # Configuration
-        SERVER_URL = "https://e1cdd19c-fdf6-4b9f-94bf-b122742d048e-00-2ltrq5fmw548e.riker.replit.dev"
-        AUTH_TOKEN = "agent-secret-token-change-this-in-production"
-        
-        logging.info("Starting WFH Monitoring Agent as service...")
-        
-        # Create and start agent
-        agent = MonitoringAgent(SERVER_URL, AUTH_TOKEN)
-        agent.start()
+        for var in required_env_vars:
+            if not os.getenv(var):
+                missing_vars.append(var)
+                
+        if missing_vars:
+            print("ERROR: Missing required environment variables:")
+            for var in missing_vars:
+                print(f"  {var}")
+            print("\nPlease set these environment variables before running the service.")
+            print("Example:")
+            print("  export WFH_SERVER_URL='https://your-server-url.com'")
+            print("  export WFH_AUTH_TOKEN='your-agent-token'")
+            sys.exit(1)
+            
+        # Platform-specific service startup
+        platform = sys.platform.lower()
+        if platform.startswith('win'):
+            logging.info("Detected Windows platform")
+        elif platform.startswith('linux'):
+            logging.info("Detected Linux platform")
+        elif platform.startswith('darwin'):
+            logging.info("Detected macOS platform")
+        else:
+            logging.warning(f"Unknown platform: {platform}")
+            
+        # Start the service
+        run_as_service()
         
     except Exception as e:
-        logging.error(f"Service error: {e}")
-        import traceback
-        logging.error(traceback.format_exc())
-        
-        # Wait and restart
-        time.sleep(30)
-        run_as_service()
+        print(f"Service wrapper startup error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    run_as_service()
-#!/usr/bin/env python3
-"""
-Windows Service Wrapper for WFH Monitoring Agent
-This allows the agent to run as a proper Windows service
-"""
-
-import sys
-import time
-import logging
-from pathlib import Path
-
-# Configure logging for service
-log_file = Path(__file__).parent / "service.log"
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_file),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-def run_as_service():
-    """Run the agent in service mode"""
-    try:
-        # Import and run the main agent
-        import importlib.util
-        import os
-        
-        # Load agent.py as a module
-        agent_path = Path(__file__).parent / "agent.py"
-        spec = importlib.util.spec_from_file_location("agent", agent_path)
-        agent_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(agent_module)
-        
-        # Configuration - Update this with your server URL
-        SERVER_URL = "https://bac533f9-caab-40a5-985b-77e95b5b3548-00-26yof333ddv5c.spock.replit.dev"
-        AUTH_TOKEN = "agent-secret-token-change-this-in-production"
-        
-        logging.info("Starting WFH Monitoring Agent as service...")
-        logging.info(f"Server URL: {SERVER_URL}")
-        
-        # Create and start agent
-        agent = agent_module.MonitoringAgent(SERVER_URL, AUTH_TOKEN)
-        agent.start()
-        
-    except Exception as e:
-        logging.error(f"Service error: {e}")
-        import traceback
-        logging.error(traceback.format_exc())
-        
-        # Wait and restart
-        logging.info("Restarting in 30 seconds...")
-        time.sleep(30)
-        run_as_service()
-
-if __name__ == "__main__":
-    run_as_service()
+    main()

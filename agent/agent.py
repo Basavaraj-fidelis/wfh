@@ -1,380 +1,334 @@
 
 #!/usr/bin/env python3
 """
-WFH Employee Monitoring Agent - ActivityWatch Integration Version
-Integrates with ActivityWatch for detailed activity tracking
+WFH Employee Monitoring Agent - Modular Version with Enhanced ActivityWatch Integration
+Improved architecture with configuration management, modular components, and better error handling
 """
 
 import os
 import sys
 import time
-import json
-import sqlite3
 import logging
-import requests
 import schedule
 import threading
-from datetime import datetime, timedelta
-from PIL import ImageGrab
-import socket
 import getpass
-import random
+import socket
+from datetime import datetime
+from pathlib import Path
+
+# Import modular components
+from config_manager import ConfigManager
+from database_manager import DatabaseManager
+from activity_collector import ActivityCollector
+from network_manager import NetworkManager
+from screenshot_manager import ScreenshotManager
 
 class MonitoringAgent:
-    def __init__(self, server_url, auth_token):
-        self.server_url = server_url.rstrip('/')
-        self.auth_token = auth_token
+    def __init__(self, config_file: str = "config.json"):
+        # Initialize components in order
+        self.config = ConfigManager(config_file)
+        self.setup_logging()
+        
+        # Get user information
         self.username = getpass.getuser()
         self.hostname = socket.gethostname()
         self.is_running = False
         
-        # Setup logging
-        self.setup_logging()
+        # Initialize managers
+        self.db = DatabaseManager(self.config)
+        self.activity_collector = ActivityCollector(self.config)
+        self.network = NetworkManager(self.config, self.db)
+        self.screenshot = ScreenshotManager(self.config)
         
-        # Setup local database for data storage
-        self.setup_database()
+        # Get intervals from config
+        intervals = self.config.get_section("intervals")
+        self.heartbeat_interval = intervals.get("heartbeat_minutes", 5)
+        self.activity_interval = intervals.get("activity_collection_minutes", 30)
+        self.sync_interval = intervals.get("data_sync_minutes", 10)
+        self.scheduler_check = intervals.get("scheduler_check_seconds", 30)
         
-        logging.info("WFH Monitoring Agent initialized")
-        logging.info(f"Server: {self.server_url}")
+        logging.info("WFH Monitoring Agent v2.0 initialized")
+        logging.info(f"Server: {self.config.get_server_url()}")
         logging.info(f"User: {self.username}@{self.hostname}")
-
-    def setup_logging(self):
-        """Setup logging configuration"""
-        log_file = os.path.join(os.path.dirname(__file__), 'agent.log')
+        logging.info(f"Intervals - Heartbeat: {self.heartbeat_interval}m, "
+                    f"Activity: {self.activity_interval}m, Sync: {self.sync_interval}m")
         
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
-
-    def setup_database(self):
-        """Setup local SQLite database for storing monitoring data"""
+    def setup_logging(self):
+        """Setup enhanced logging configuration"""
         try:
-            db_path = os.path.join(os.path.dirname(__file__), 'agent_data.db')
-            self.conn = sqlite3.connect(db_path, check_same_thread=False)
-            self.conn.execute('PRAGMA foreign_keys = ON')
+            log_config = self.config.get_section("logging")
+            log_level = getattr(logging, log_config.get("level", "INFO").upper())
             
-            # Create tables
-            self.conn.execute('''
-                CREATE TABLE IF NOT EXISTS heartbeats (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    location_data TEXT,
-                    sent_to_server BOOLEAN DEFAULT FALSE
-                )
-            ''')
+            # Create logs directory
+            log_dir = Path(__file__).parent / "logs"
+            log_dir.mkdir(exist_ok=True)
             
-            self.conn.execute('''
-                CREATE TABLE IF NOT EXISTS activity_data (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    source TEXT NOT NULL,
-                    activity_data TEXT NOT NULL,
-                    productivity_hours REAL DEFAULT 0,
-                    screenshot_path TEXT,
-                    sent_to_server BOOLEAN DEFAULT FALSE
-                )
-            ''')
+            log_file = log_dir / "agent.log"
             
-            self.conn.execute('''
-                CREATE TABLE IF NOT EXISTS web_activity (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    url TEXT,
-                    title TEXT,
-                    duration INTEGER DEFAULT 0,
-                    sent_to_server BOOLEAN DEFAULT FALSE
-                )
-            ''')
+            # Configure logging with rotation
+            from logging.handlers import RotatingFileHandler
             
-            self.conn.commit()
-            logging.info("Local database setup complete")
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=log_config.get("max_file_size_mb", 10) * 1024 * 1024,
+                backupCount=log_config.get("backup_count", 5),
+                encoding='utf-8'
+            )
+            
+            console_handler = logging.StreamHandler(sys.stdout)
+            
+            # Enhanced format with more context
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s'
+            )
+            
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+            
+            # Configure root logger
+            root_logger = logging.getLogger()
+            root_logger.setLevel(log_level)
+            root_logger.addHandler(file_handler)
+            root_logger.addHandler(console_handler)
+            
+            logging.info("Enhanced logging system initialized")
             
         except Exception as e:
-            logging.error(f"Database setup error: {e}")
-
-    def get_location_data(self):
-        """Get basic location/network information"""
+            # Fallback to basic logging
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(levelname)s - %(message)s',
+                handlers=[
+                    logging.FileHandler('agent.log', encoding='utf-8'),
+                    logging.StreamHandler(sys.stdout)
+                ]
+            )
+            logging.error(f"Failed to setup enhanced logging, using basic: {e}")
+            
+    def test_connections(self) -> bool:
+        """Test all connections before starting main operations"""
+        logging.info("Testing system connections...")
+        
+        # Test server connection
+        server_ok, server_msg = self.network.test_server_connection()
+        if server_ok:
+            logging.info(f"✓ Server connection: {server_msg}")
+        else:
+            logging.error(f"✗ Server connection: {server_msg}")
+            
+        # Test ActivityWatch availability
+        aw_available = self.activity_collector.is_activitywatch_available()
+        if aw_available:
+            logging.info("✓ ActivityWatch integration: Available")
+        else:
+            logging.warning("⚠ ActivityWatch integration: Not available, using basic monitoring")
+            
+        # Test database
         try:
-            # Get local IP
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.connect(("8.8.8.8", 80))
-            local_ip = s.getsockname()[0]
-            s.close()
-            
-            # Try to get public IP
-            try:
-                response = requests.get('https://api.ipify.org?format=json', timeout=5)
-                public_ip = response.json().get('ip', 'unknown')
-            except:
-                public_ip = 'unknown'
-            
-            return {
-                'local_ip': local_ip,
-                'public_ip': public_ip,
-                'hostname': self.hostname
-            }
+            stats = self.db.get_database_stats()
+            logging.info(f"✓ Local database: {stats.get('database_size_mb', 0)}MB, "
+                        f"{stats.get('heartbeats_unsent', 0)} unsent heartbeats, "
+                        f"{stats.get('activity_data_unsent', 0)} unsent activity logs")
         except Exception as e:
-            logging.error(f"Location data error: {e}")
-            return {'local_ip': 'unknown', 'public_ip': 'unknown', 'hostname': self.hostname}
-
-    def capture_screenshot(self):
-        """Capture desktop screenshot"""
+            logging.error(f"✗ Database error: {e}")
+            return False
+            
+        # Test screenshot capability
         try:
-            screenshots_dir = os.path.join(os.path.dirname(__file__), 'screenshots')
-            os.makedirs(screenshots_dir, exist_ok=True)
-            
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{self.username}_{timestamp}.png"
-            filepath = os.path.join(screenshots_dir, filename)
-            
-            screenshot = ImageGrab.grab()
-            screenshot.save(filepath, 'PNG')
-            
-            logging.info(f"Screenshot captured: {filename}")
-            return filepath
-            
-        except Exception as e:
-            logging.error(f"Screenshot capture error: {e}")
-            return None
-
-    def get_activitywatch_data(self):
-        """Get activity data from ActivityWatch"""
-        try:
-            # ActivityWatch typically runs on localhost:5600
-            aw_base_url = "http://localhost:5600"
-            
-            # Get available buckets
-            buckets_response = requests.get(f"{aw_base_url}/api/0/buckets", timeout=10)
-            if buckets_response.status_code != 200:
-                logging.warning("ActivityWatch not available - falling back to basic monitoring")
-                return self.get_basic_activity_data()
-            
-            buckets = buckets_response.json()
-            
-            # Get data from last hour
-            end_time = datetime.now()
-            start_time = end_time - timedelta(hours=1)
-            
-            activity_data = {
-                'timestamp': end_time.isoformat(),
-                'window_data': [],
-                'web_data': [],
-                'productivity_hours': 0
-            }
-            
-            # Get window activity data
-            for bucket_id, bucket_info in buckets.items():
-                if 'afk' in bucket_id.lower():
-                    continue
-                    
+            test_screenshot = self.screenshot.capture_screenshot(self.username)
+            if test_screenshot:
+                logging.info("✓ Screenshot capability: Working")
+                # Clean up test screenshot
                 try:
-                    events_url = f"{aw_base_url}/api/0/buckets/{bucket_id}/events"
-                    params = {
-                        'start': start_time.isoformat(),
-                        'end': end_time.isoformat()
-                    }
-                    
-                    events_response = requests.get(events_url, params=params, timeout=5)
-                    if events_response.status_code == 200:
-                        events = events_response.json()
-                        
-                        if 'window' in bucket_id.lower():
-                            activity_data['window_data'].extend(events)
-                        elif 'web' in bucket_id.lower() or 'browser' in bucket_id.lower():
-                            activity_data['web_data'].extend(events)
-                            
-                except Exception as e:
-                    logging.error(f"Error getting events from bucket {bucket_id}: {e}")
-            
-            # Calculate productivity hours (simple estimation)
-            total_active_time = 0
-            for event in activity_data['window_data']:
-                if 'duration' in event:
-                    total_active_time += event['duration']
-            
-            activity_data['productivity_hours'] = total_active_time / 3600  # Convert to hours
-            
-            logging.info(f"ActivityWatch data collected: {len(activity_data['window_data'])} window events, {len(activity_data['web_data'])} web events")
-            return activity_data
-            
+                    os.remove(test_screenshot)
+                except:
+                    pass
+            else:
+                logging.warning("⚠ Screenshot capability: Failed")
         except Exception as e:
-            logging.error(f"ActivityWatch data collection error: {e}")
-            return self.get_basic_activity_data()
-
-    def get_basic_activity_data(self):
-        """Fallback basic activity monitoring when ActivityWatch is not available"""
+            logging.error(f"✗ Screenshot test error: {e}")
+            
+        return server_ok  # Must have server connection to proceed
+        
+    def collect_and_store_heartbeat(self):
+        """Collect and store heartbeat data"""
         try:
-            import psutil
+            logging.debug("Collecting heartbeat data...")
             
-            # Get basic system info
-            activity_data = {
-                'timestamp': datetime.now().isoformat(),
-                'cpu_percent': psutil.cpu_percent(interval=1),
-                'memory_percent': psutil.virtual_memory().percent,
-                'active_processes': len(psutil.pids()),
-                'productivity_hours': 1.0  # Assume 1 hour of activity as basic fallback
-            }
+            record_id = self.db.store_heartbeat(
+                username=self.username,
+                hostname=self.hostname,
+                status="online"
+            )
             
-            logging.info("Basic activity data collected (ActivityWatch not available)")
-            return activity_data
-            
+            if record_id:
+                logging.info(f"Heartbeat stored (ID: {record_id})")
+            else:
+                logging.error("Failed to store heartbeat")
+                
         except Exception as e:
-            logging.error(f"Basic activity data error: {e}")
-            return {
-                'timestamp': datetime.now().isoformat(),
-                'error': str(e),
-                'productivity_hours': 0.5
-            }
-
-    def store_heartbeat(self):
-        """Store heartbeat data locally"""
+            logging.error(f"Heartbeat collection error: {e}")
+            
+    def collect_and_store_activity(self):
+        """Collect comprehensive activity data and store locally"""
         try:
-            location_data = self.get_location_data()
-            timestamp = datetime.now().isoformat()
+            logging.info("Collecting comprehensive activity data...")
             
-            self.conn.execute('''
-                INSERT INTO heartbeats (timestamp, status, location_data, sent_to_server)
-                VALUES (?, ?, ?, ?)
-            ''', (timestamp, 'online', json.dumps(location_data), False))
-            
-            self.conn.commit()
-            logging.info("Heartbeat stored locally")
-            
-        except Exception as e:
-            logging.error(f"Store heartbeat error: {e}")
-
-    def store_activity_data(self):
-        """Store detailed activity data locally"""
-        try:
-            # Get activity data from ActivityWatch
-            activity_data = self.get_activitywatch_data()
+            # Get comprehensive activity data from ActivityWatch
+            activity_data = self.activity_collector.get_comprehensive_activity_data()
             
             # Capture screenshot
-            screenshot_path = self.capture_screenshot()
+            screenshot_path = self.screenshot.capture_screenshot(self.username)
             
-            # Store in local database
-            timestamp = datetime.now().isoformat()
-            self.conn.execute('''
-                INSERT INTO activity_data (timestamp, source, activity_data, productivity_hours, screenshot_path, sent_to_server)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (timestamp, 'activitywatch', json.dumps(activity_data), activity_data.get('productivity_hours', 0), screenshot_path, False))
+            # Store in database
+            record_id = self.db.store_activity_data(
+                username=self.username,
+                hostname=self.hostname,
+                source="activitywatch_v2",
+                activity_data=activity_data,
+                productivity_hours=activity_data.get('total_active_time_minutes', 0) / 60,
+                screenshot_path=screenshot_path
+            )
             
-            self.conn.commit()
-            logging.info(f"Activity data stored locally (Productivity: {activity_data.get('productivity_hours', 0):.2f} hours)")
-            
+            if record_id:
+                productivity_score = activity_data.get('summary', {}).get('productivity_score', 0)
+                active_minutes = activity_data.get('total_active_time_minutes', 0)
+                apps_count = activity_data.get('summary', {}).get('apps_used_count', 0)
+                websites_count = activity_data.get('summary', {}).get('websites_visited_count', 0)
+                
+                logging.info(f"Activity data stored (ID: {record_id}) - "
+                           f"Productivity: {productivity_score}%, "
+                           f"Active: {active_minutes}min, "
+                           f"Apps: {apps_count}, Websites: {websites_count}")
+                           
+                if screenshot_path:
+                    screenshot_info = self.screenshot.verify_screenshot_quality(screenshot_path)
+                    if screenshot_info.get('valid'):
+                        logging.info(f"Screenshot saved: {Path(screenshot_path).name} "
+                                   f"({screenshot_info.get('file_size_mb', 0)}MB)")
+            else:
+                logging.error("Failed to store activity data")
+                
         except Exception as e:
-            logging.error(f"Store activity data error: {e}")
-
-    def send_data_to_server(self):
-        """Send stored data to server"""
+            logging.error(f"Activity collection error: {e}")
+            
+    def synchronize_with_server(self):
+        """Synchronize stored data with server"""
         try:
-            headers = {'Authorization': f'Bearer {self.auth_token}'}
+            logging.info("Synchronizing data with server...")
             
-            # Send unsent heartbeats
-            cursor = self.conn.execute('SELECT * FROM heartbeats WHERE sent_to_server = FALSE ORDER BY timestamp')
-            heartbeats = cursor.fetchall()
+            sync_results = self.network.sync_stored_data(self.username, self.hostname)
             
-            for heartbeat in heartbeats:
-                hb_id, timestamp, status, location_data, _ = heartbeat
-                
-                data = {
-                    'username': self.username,
-                    'hostname': self.hostname,
-                    'status': status,
-                    'timestamp': timestamp,
-                    'location_data': json.loads(location_data) if location_data else {}
-                }
-                
-                try:
-                    response = requests.post(f"{self.server_url}/api/heartbeat", json=data, headers=headers, timeout=30)
-                    if response.status_code == 200:
-                        self.conn.execute('UPDATE heartbeats SET sent_to_server = TRUE WHERE id = ?', (hb_id,))
-                        logging.info(f"Heartbeat sent successfully: {response.status_code}")
-                    else:
-                        logging.error(f"Heartbeat failed: {response.status_code}")
-                except Exception as e:
-                    logging.error(f"Heartbeat send error: {e}")
+            total_sent = sync_results['heartbeats_sent'] + sync_results['activity_logs_sent']
+            total_failed = sync_results['heartbeats_failed'] + sync_results['activity_logs_failed']
             
-            # Send unsent activity data
-            cursor = self.conn.execute('SELECT * FROM activity_data WHERE sent_to_server = FALSE ORDER BY timestamp')
-            activity_logs = cursor.fetchall()
-            
-            for activity_log in activity_logs:
-                log_id, timestamp, source, activity_data_str, productivity_hours, screenshot_path, _ = activity_log
-                
-                files = {}
-                if screenshot_path and os.path.exists(screenshot_path):
-                    files['screenshot'] = open(screenshot_path, 'rb')
-                
-                data = {
-                    'username': self.username,
-                    'hostname': self.hostname,
-                    'timestamp': timestamp,
-                    'source': source,
-                    'activity_data': activity_data_str,
-                    'productivity_hours': str(productivity_hours),
-                    'location_data': json.dumps(self.get_location_data())
-                }
-                
-                try:
-                    response = requests.post(f"{self.server_url}/api/log", data=data, files=files, headers=headers, timeout=60)
+            if total_sent > 0:
+                logging.info(f"Sync completed: {sync_results['heartbeats_sent']} heartbeats, "
+                           f"{sync_results['activity_logs_sent']} activity logs sent")
+                           
+            if total_failed > 0:
+                logging.warning(f"Sync issues: {sync_results['heartbeats_failed']} heartbeats, "
+                              f"{sync_results['activity_logs_failed']} activity logs failed")
+                              
+                # Log first few errors for debugging
+                for error in sync_results['errors'][:3]:  # Limit to first 3 errors
+                    logging.debug(f"Sync error: {error}")
                     
-                    if files:
-                        files['screenshot'].close()
-                    
-                    if response.status_code == 200:
-                        self.conn.execute('UPDATE activity_data SET sent_to_server = TRUE WHERE id = ?', (log_id,))
-                        logging.info(f"Activity log sent successfully: {response.status_code}")
-                    else:
-                        logging.error(f"Activity log failed: {response.status_code}")
-                        
-                except Exception as e:
-                    logging.error(f"Activity log send error: {e}")
-                    if files and 'screenshot' in files:
-                        files['screenshot'].close()
-            
-            self.conn.commit()
-            
         except Exception as e:
-            logging.error(f"Send data to server error: {e}")
-
+            logging.error(f"Synchronization error: {e}")
+            
+    def perform_maintenance(self):
+        """Perform periodic maintenance tasks"""
+        try:
+            logging.debug("Performing maintenance tasks...")
+            
+            # Clean up old data
+            self.db.cleanup_old_data()
+            
+            # Clean up old screenshots
+            deleted_screenshots = self.screenshot.cleanup_old_screenshots(
+                days=self.config.get("local_storage", "cleanup_days", 7)
+            )
+            
+            if deleted_screenshots > 0:
+                logging.info(f"Maintenance: Cleaned up {deleted_screenshots} old screenshots")
+                
+            # Log storage statistics
+            db_stats = self.db.get_database_stats()
+            screenshot_stats = self.screenshot.get_storage_stats()
+            
+            logging.info(f"Storage stats - DB: {db_stats.get('database_size_mb', 0)}MB, "
+                        f"Screenshots: {screenshot_stats.get('total_files', 0)} files "
+                        f"({screenshot_stats.get('total_size_mb', 0)}MB)")
+                        
+        except Exception as e:
+            logging.error(f"Maintenance error: {e}")
+            
     def schedule_tasks(self):
-        """Schedule all monitoring tasks"""
-        # Heartbeat every 5 minutes
-        schedule.every(5).minutes.do(self.store_heartbeat)
+        """Schedule all monitoring tasks with configurable intervals"""
+        logging.info("Scheduling monitoring tasks...")
         
-        # Activity data collection every 30 minutes
-        schedule.every(30).minutes.do(self.store_activity_data)
+        # Schedule heartbeat collection
+        schedule.every(self.heartbeat_interval).minutes.do(self.collect_and_store_heartbeat)
         
-        # Send data to server every 10 minutes
-        schedule.every(10).minutes.do(self.send_data_to_server)
+        # Schedule activity data collection
+        schedule.every(self.activity_interval).minutes.do(self.collect_and_store_activity)
         
-        # Initial data collection
-        self.store_heartbeat()
-        self.store_activity_data()
-
+        # Schedule server synchronization
+        schedule.every(self.sync_interval).minutes.do(self.synchronize_with_server)
+        
+        # Schedule maintenance (daily)
+        schedule.every().day.at("02:00").do(self.perform_maintenance)
+        
+        # Run initial collections
+        logging.info("Running initial data collection...")
+        self.collect_and_store_heartbeat()
+        self.collect_and_store_activity()
+        
+        logging.info(f"Tasks scheduled successfully - checking every {self.scheduler_check}s")
+        
     def run_scheduler(self):
-        """Run the task scheduler"""
+        """Run the task scheduler with proper error handling"""
+        logging.info("Starting task scheduler...")
+        
+        error_count = 0
+        max_errors = 5
+        
         while self.is_running:
             try:
                 schedule.run_pending()
-                time.sleep(30)  # Check every 30 seconds
+                time.sleep(self.scheduler_check)
+                error_count = 0  # Reset error count on successful iteration
+                
             except Exception as e:
-                logging.error(f"Scheduler error: {e}")
-                time.sleep(60)
-
+                error_count += 1
+                logging.error(f"Scheduler error ({error_count}/{max_errors}): {e}")
+                
+                if error_count >= max_errors:
+                    logging.critical(f"Too many scheduler errors ({error_count}), stopping agent")
+                    self.stop()
+                    break
+                    
+                # Exponential backoff for errors
+                sleep_time = min(300, 30 * (2 ** (error_count - 1)))  # Max 5 minutes
+                logging.info(f"Retrying in {sleep_time} seconds...")
+                time.sleep(sleep_time)
+                
+        logging.info("Task scheduler stopped")
+        
     def start(self):
-        """Start the monitoring agent"""
+        """Start the monitoring agent with comprehensive error handling"""
         try:
             self.is_running = True
-            logging.info("Starting WFH Monitoring Agent...")
+            logging.info("=" * 60)
+            logging.info("Starting WFH Monitoring Agent v2.0...")
+            logging.info("=" * 60)
             
+            # Test all connections first
+            if not self.test_connections():
+                logging.error("Critical connection tests failed, cannot start agent")
+                return False
+                
             # Schedule tasks
             self.schedule_tasks()
             
@@ -382,25 +336,52 @@ class MonitoringAgent:
             scheduler_thread = threading.Thread(target=self.run_scheduler, daemon=True)
             scheduler_thread.start()
             
-            logging.info("Agent is running. Press Ctrl+C to stop.")
+            logging.info("Agent is running successfully! Press Ctrl+C to stop.")
+            logging.info("Monitor the logs for activity updates...")
             
-            # Keep main thread alive
+            # Keep main thread alive with periodic status updates
+            last_status_update = 0
+            status_interval = 3600  # 1 hour
+            
             while self.is_running:
-                time.sleep(1)
+                time.sleep(60)  # Check every minute
+                
+                current_time = time.time()
+                if current_time - last_status_update > status_interval:
+                    # Log periodic status
+                    db_stats = self.db.get_database_stats()
+                    logging.info(f"Status update - Unsent: {db_stats.get('heartbeats_unsent', 0)} heartbeats, "
+                               f"{db_stats.get('activity_data_unsent', 0)} activity logs")
+                    last_status_update = current_time
+                    
+            return True
                 
         except KeyboardInterrupt:
-            logging.info("Agent stopped by user")
+            logging.info("Agent stopped by user (Ctrl+C)")
             self.stop()
+            return True
         except Exception as e:
-            logging.error(f"Agent error: {e}")
+            logging.error(f"Agent startup error: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
             self.stop()
-
+            return False
+            
     def stop(self):
-        """Stop the monitoring agent"""
+        """Stop the monitoring agent and cleanup resources"""
+        logging.info("Stopping WFH Monitoring Agent...")
+        
         self.is_running = False
-        if hasattr(self, 'conn'):
-            self.conn.close()
-        logging.info("Agent stopped")
+        
+        # Cleanup resources
+        try:
+            if hasattr(self, 'network'):
+                self.network.close()
+        except Exception as e:
+            logging.error(f"Error closing network manager: {e}")
+            
+        logging.info("Agent stopped successfully")
+        logging.info("=" * 60)
 
 if __name__ == "__main__":
     # Configuration
