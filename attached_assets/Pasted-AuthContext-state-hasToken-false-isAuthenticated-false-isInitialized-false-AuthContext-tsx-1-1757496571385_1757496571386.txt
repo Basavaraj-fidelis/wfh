@@ -1,0 +1,59 @@
+AuthContext state: {hasToken: false, isAuthenticated: false, isInitialized: false}
+AuthContext.tsx:133 AuthContext state: {hasToken: false, isAuthenticated: false, isInitialized: false}
+react-router-dom.js?v=e55a104c:4393 ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+warnOnce @ react-router-dom.js?v=e55a104c:4393
+logDeprecation @ react-router-dom.js?v=e55a104c:4396
+logV6DeprecationWarnings @ react-router-dom.js?v=e55a104c:4399
+(anonymous) @ react-router-dom.js?v=e55a104c:5271
+commitHookEffectListMount @ chunk-PJEEZAML.js?v=e55a104c:16915
+commitPassiveMountOnFiber @ chunk-PJEEZAML.js?v=e55a104c:18156
+commitPassiveMountEffects_complete @ chunk-PJEEZAML.js?v=e55a104c:18129
+commitPassiveMountEffects_begin @ chunk-PJEEZAML.js?v=e55a104c:18119
+commitPassiveMountEffects @ chunk-PJEEZAML.js?v=e55a104c:18109
+flushPassiveEffectsImpl @ chunk-PJEEZAML.js?v=e55a104c:19490
+flushPassiveEffects @ chunk-PJEEZAML.js?v=e55a104c:19447
+(anonymous) @ chunk-PJEEZAML.js?v=e55a104c:19328
+workLoop @ chunk-PJEEZAML.js?v=e55a104c:197
+flushWork @ chunk-PJEEZAML.js?v=e55a104c:176
+performWorkUntilDeadline @ chunk-PJEEZAML.js?v=e55a104c:384
+react-router-dom.js?v=e55a104c:4393 ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+warnOnce @ react-router-dom.js?v=e55a104c:4393
+logDeprecation @ react-router-dom.js?v=e55a104c:4396
+logV6DeprecationWarnings @ react-router-dom.js?v=e55a104c:4402
+(anonymous) @ react-router-dom.js?v=e55a104c:5271
+commitHookEffectListMount @ chunk-PJEEZAML.js?v=e55a104c:16915
+commitPassiveMountOnFiber @ chunk-PJEEZAML.js?v=e55a104c:18156
+commitPassiveMountEffects_complete @ chunk-PJEEZAML.js?v=e55a104c:18129
+commitPassiveMountEffects_begin @ chunk-PJEEZAML.js?v=e55a104c:18119
+commitPassiveMountEffects @ chunk-PJEEZAML.js?v=e55a104c:18109
+flushPassiveEffectsImpl @ chunk-PJEEZAML.js?v=e55a104c:19490
+flushPassiveEffects @ chunk-PJEEZAML.js?v=e55a104c:19447
+(anonymous) @ chunk-PJEEZAML.js?v=e55a104c:19328
+workLoop @ chunk-PJEEZAML.js?v=e55a104c:197
+flushWork @ chunk-PJEEZAML.js?v=e55a104c:176
+performWorkUntilDeadline @ chunk-PJEEZAML.js?v=e55a104c:384
+AuthContext.tsx:96 Initializing auth, saved token: false
+AuthContext.tsx:96 Initializing auth, saved token: false
+AuthContext.tsx:133 AuthContext state: {hasToken: false, isAuthenticated: false, isInitialized: true}
+AuthContext.tsx:133 AuthContext state: {hasToken: false, isAuthenticated: false, isInitialized: true}
+Login.tsx:30 Login form submitted
+AuthContext.tsx:45 Attempting login with: admin
+AuthContext.tsx:52 Login response: {access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZ…Q2MH0.QNW5jQ0RdgyZjBzwxzJeqThxanC9dmiCJN34o7WZfzE', token_type: 'bearer'}
+AuthContext.tsx:57 Setting token: eyJhbGciOiJIUzI1NiIs...
+AuthContext.tsx:70 Login successful, token set
+Login.tsx:32 Login result: true
+Login.tsx:35 Login successful, navigating to dashboard
+AuthContext.tsx:133 AuthContext state: {hasToken: true, isAuthenticated: true, isInitialized: true}
+AuthContext.tsx:133 AuthContext state: {hasToken: true, isAuthenticated: true, isInitialized: true}
+ProtectedRoute.tsx:14 ProtectedRoute check: {isAuthenticated: true, isInitialized: true, hasToken: true, currentPath: '/'}
+ProtectedRoute.tsx:41 Authenticated, rendering protected content
+ProtectedRoute.tsx:14 ProtectedRoute check: {isAuthenticated: true, isInitialized: true, hasToken: true, currentPath: '/'}
+ProtectedRoute.tsx:41 Authenticated, rendering protected content
+AuthContext.tsx:86 Logging out...
+AuthContext.tsx:86 Logging out...
+AuthContext.tsx:133 AuthContext state: {hasToken: false, isAuthenticated: false, isInitialized: true}
+AuthContext.tsx:133 AuthContext state: {hasToken: false, isAuthenticated: false, isInitialized: true}
+ProtectedRoute.tsx:14 ProtectedRoute check: {isAuthenticated: false, isInitialized: true, hasToken: false, currentPath: '/'}
+ProtectedRoute.tsx:37 Not authenticated, redirecting to login
+ProtectedRoute.tsx:14 ProtectedRoute check: {isAuthenticated: false, isInitialized: true, hasToken: false, currentPath: '/'}
+ProtectedRoute.tsx:37 Not authenticated, redirecting to login
