@@ -29,6 +29,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Check if token is expired
   const isTokenValid = (token: string): boolean => {
+    if (!token) return false;
     try {
       const payload = JSON.parse(atob(token.split('.')[1]));
       const currentTime = Date.now() / 1000;

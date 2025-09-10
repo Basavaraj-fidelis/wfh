@@ -8,7 +8,7 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const { isAuthenticated, isInitialized } = useAuth();
+  const { isAuthenticated, isInitialized, token } = useAuth();
 
   // Show loading while initializing
   if (!isInitialized) {
@@ -24,6 +24,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       </div>
     );
   }
+
+  console.log('ProtectedRoute - isAuthenticated:', isAuthenticated, 'token:', !!token);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
