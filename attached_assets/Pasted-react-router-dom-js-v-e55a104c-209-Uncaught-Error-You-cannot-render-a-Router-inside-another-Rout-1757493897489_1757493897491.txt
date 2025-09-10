@@ -1,0 +1,44 @@
+react-router-dom.js?v=e55a104c:209 Uncaught Error: You cannot render a <Router> inside another <Router>. You should never have more than one in your app.
+    at invariant (react-router-dom.js?v=e55a104c:209:11)
+    at Router (react-router-dom.js?v=e55a104c:4509:35)
+    at renderWithHooks (chunk-PJEEZAML.js?v=e55a104c:11548:26)
+    at mountIndeterminateComponent (chunk-PJEEZAML.js?v=e55a104c:14926:21)
+    at beginWork (chunk-PJEEZAML.js?v=e55a104c:15914:22)
+    at HTMLUnknownElement.callCallback2 (chunk-PJEEZAML.js?v=e55a104c:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-PJEEZAML.js?v=e55a104c:3699:24)
+    at invokeGuardedCallback (chunk-PJEEZAML.js?v=e55a104c:3733:39)
+    at beginWork$1 (chunk-PJEEZAML.js?v=e55a104c:19765:15)
+    at performUnitOfWork (chunk-PJEEZAML.js?v=e55a104c:19198:20)
+react-router-dom.js?v=e55a104c:209 Uncaught Error: You cannot render a <Router> inside another <Router>. You should never have more than one in your app.
+    at invariant (react-router-dom.js?v=e55a104c:209:11)
+    at Router (react-router-dom.js?v=e55a104c:4509:35)
+    at renderWithHooks (chunk-PJEEZAML.js?v=e55a104c:11548:26)
+    at mountIndeterminateComponent (chunk-PJEEZAML.js?v=e55a104c:14926:21)
+    at beginWork (chunk-PJEEZAML.js?v=e55a104c:15914:22)
+    at HTMLUnknownElement.callCallback2 (chunk-PJEEZAML.js?v=e55a104c:3674:22)
+    at Object.invokeGuardedCallbackDev (chunk-PJEEZAML.js?v=e55a104c:3699:24)
+    at invokeGuardedCallback (chunk-PJEEZAML.js?v=e55a104c:3733:39)
+    at beginWork$1 (chunk-PJEEZAML.js?v=e55a104c:19765:15)
+    at performUnitOfWork (chunk-PJEEZAML.js?v=e55a104c:19198:20)
+chunk-PJEEZAML.js?v=e55a104c:14032 The above error occurred in the <Router> component:
+
+    at Router (https://4dd3a09f-fa36-4ae7-8a35-a21fa93f6273-00-2f10rgn3qpyid.picard.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=e55a104c:4501:15)
+    at BrowserRouter (https://4dd3a09f-fa36-4ae7-8a35-a21fa93f6273-00-2f10rgn3qpyid.picard.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=e55a104c:5247:5)
+    at AuthProvider (https://4dd3a09f-fa36-4ae7-8a35-a21fa93f6273-00-2f10rgn3qpyid.picard.replit.dev/src/contexts/AuthContext.tsx:30:32)
+    at App
+    at Router (https://4dd3a09f-fa36-4ae7-8a35-a21fa93f6273-00-2f10rgn3qpyid.picard.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=e55a104c:4501:15)
+    at BrowserRouter (https://4dd3a09f-fa36-4ae7-8a35-a21fa93f6273-00-2f10rgn3qpyid.picard.replit.dev/node_modules/.vite/deps/react-router-dom.js?v=e55a104c:5247:5)
+
+Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://reactjs.org/link/error-boundaries to learn more about error boundaries.
+chunk-PJEEZAML.js?v=e55a104c:19413 Uncaught Error: You cannot render a <Router> inside another <Router>. You should never have more than one in your app.
+    at invariant (react-router-dom.js?v=e55a104c:209:11)
+    at Router (react-router-dom.js?v=e55a104c:4509:35)
+    at renderWithHooks (chunk-PJEEZAML.js?v=e55a104c:11548:26)
+    at mountIndeterminateComponent (chunk-PJEEZAML.js?v=e55a104c:14926:21)
+    at beginWork (chunk-PJEEZAML.js?v=e55a104c:15914:22)
+    at beginWork$1 (chunk-PJEEZAML.js?v=e55a104c:19753:22)
+    at performUnitOfWork (chunk-PJEEZAML.js?v=e55a104c:19198:20)
+    at workLoopSync (chunk-PJEEZAML.js?v=e55a104c:19137:13)
+    at renderRootSync (chunk-PJEEZAML.js?v=e55a104c:19116:15)
+    at recoverFromConcurrentError (chunk-PJEEZAML.js?v=e55a104c:18736:28
