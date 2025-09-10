@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,8 +8,16 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, isAuthenticated, isInitialized } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isInitialized && isAuthenticated) {
+      console.log('User already authenticated, redirecting to dashboard');
+      navigate('/', { replace: true });
+    }
+  }, [isInitialized, isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,13 +25,21 @@ const Login: React.FC = () => {
     setError('');
 
     try {
+      console.log('Login form submitted');
       const success = await login(username, password);
+      console.log('Login result:', success);
+      
       if (success) {
-        navigate('/', { replace: true });
+        console.log('Login successful, navigating to dashboard');
+        // Use setTimeout to ensure state updates are processed
+        setTimeout(() => {
+          navigate('/', { replace: true });
+        }, 100);
       } else {
         setError('Invalid username or password');
       }
     } catch (err) {
+      console.error('Login error:', err);
       setError('Login failed. Please try again.');
     } finally {
       setLoading(false);

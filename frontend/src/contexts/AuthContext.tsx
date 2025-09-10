@@ -42,25 +42,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
+      console.log('Attempting login with:', username);
+      
       const response = await axios.post('/api/admin/login', {
         username,
         password
       });
 
+      console.log('Login response:', response.data);
+
       if (response.data.access_token) {
         const newToken = response.data.access_token;
+        
+        console.log('Setting token:', newToken.substring(0, 20) + '...');
 
-        // Set the token first
-        localStorage.setItem('adminToken', newToken);
+        // Validate token before setting
+        if (isTokenValid(newToken)) {
+          // Set the token first
+          localStorage.setItem('adminToken', newToken);
 
-        // Update axios defaults immediately for this session
-        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+          // Update axios defaults immediately for this session
+          axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
-        // Then update state
-        setToken(newToken);
+          // Then update state
+          setToken(newToken);
 
-        return true;
+          console.log('Login successful, token set');
+          return true;
+        } else {
+          console.error('Received invalid token');
+          return false;
+        }
       }
+      console.error('No access token in response');
       return false;
     } catch (error) {
       console.error('Login failed:', error);
