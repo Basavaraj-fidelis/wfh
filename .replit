@@ -86,6 +86,6 @@ channel = "stable-25_05"
 packages = ["cargo", "freetype", "lcms2", "libiconv", "libimagequant", "libjpeg", "libtiff", "libwebp", "libxcrypt", "openjpeg", "rustc", "tcl", "tk", "zlib"]
 
 [deployment]
-deploymentTarget = "vm"
-run = ["bash", "-c", "cd server && python main.py"]
-build = ["bash", "-c", "cd frontend && npm run build"]
+deploymentTarget = "autoscale"
+run = ["bash", "-c", "cd server && python main.py & cd frontend && npm run preview"]
+build = ["npm", "run", "build"]
