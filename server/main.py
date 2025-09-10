@@ -336,6 +336,10 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
     office_productivity = sum([emp['raw_productivity'] for emp in office_employees]) / len(office_employees) if office_employees else 0
     remote_productivity = sum([emp['raw_productivity'] for emp in remote_employees]) / len(remote_employees) if remote_employees else 0
     
+    # Calculate additional hybrid work insights
+    online_office = [emp for emp in office_employees if emp['status'] == 'online']
+    online_remote = [emp for emp in remote_employees if emp['status'] == 'online']
+    
     return {
         "employees": enhanced_data,
         "dashboard_stats": {
@@ -343,7 +347,13 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
             "office_count": len(office_employees),
             "remote_count": len(remote_employees),
             "office_productivity": round(office_productivity),
-            "remote_productivity": round(remote_productivity)
+            "remote_productivity": round(remote_productivity),
+            "online_office_count": len(online_office),
+            "online_remote_count": len(online_remote),
+            "hybrid_work_distribution": {
+                "office_percentage": round((len(office_employees) / total_employees * 100)) if total_employees > 0 else 0,
+                "remote_percentage": round((len(remote_employees) / total_employees * 100)) if total_employees > 0 else 0
+            }
         }
     }
 
@@ -574,11 +584,50 @@ def get_daily_report(
                 "logs_count": logs_count
             })
 
+    # Calculate work location statistics for the day
+    office_employees_today = []
+    remote_employees_today = []
+    
+    for employee_data in report_data:
+        # Get employee's location for this date
+        latest_log_for_date = db.query(EmployeeLog).filter(
+            EmployeeLog.username == employee_data["username"],
+            EmployeeLog.timestamp >= start_of_day,
+            EmployeeLog.timestamp < end_of_day
+        ).order_by(desc(EmployeeLog.timestamp)).first()
+        
+        if latest_log_for_date and latest_log_for_date.location:
+            try:
+                location_data = json.loads(latest_log_for_date.location)
+                public_ip = location_data.get('ip', 'Unknown')
+                if public_ip == "14.96.131.106":
+                    office_employees_today.append(employee_data)
+                    employee_data["work_location"] = "Office Bangalore"
+                else:
+                    remote_employees_today.append(employee_data)
+                    employee_data["work_location"] = "Remote Work"
+            except:
+                remote_employees_today.append(employee_data)
+                employee_data["work_location"] = "Remote Work"
+        else:
+            remote_employees_today.append(employee_data)
+            employee_data["work_location"] = "Remote Work"
+    
+    office_hours = sum([emp["hours_worked"] for emp in office_employees_today])
+    remote_hours = sum([emp["hours_worked"] for emp in remote_employees_today])
+    
     return {
         "date": target_date.isoformat(),
         "total_employees_active": len(report_data),
         "total_hours_worked": round(total_hours, 2),
         "average_hours_per_employee": round(total_hours / len(report_data), 2) if report_data else 0,
+        "work_location_breakdown": {
+            "office_employees": len(office_employees_today),
+            "remote_employees": len(remote_employees_today),
+            "office_hours_total": round(office_hours, 2),
+            "remote_hours_total": round(remote_hours, 2),
+            "office_percentage": round((len(office_employees_today) / len(report_data) * 100)) if report_data else 0
+        },
         "employees": report_data
     }
 
