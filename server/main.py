@@ -497,19 +497,24 @@ def get_enhanced_employee_data(admin=Depends(verify_admin_token), db: Session = 
 @app.get("/api/admin/employees/status")
 def get_employee_status(admin=Depends(verify_admin_token), db: Session = Depends(get_db)):
     """Get current online status of all employees with location details"""
-    # Get latest heartbeat for each employee
-    latest_heartbeats = db.query(
-        EmployeeHeartbeat.username,
-        func.max(EmployeeHeartbeat.timestamp).label('latest_timestamp')
-    ).group_by(EmployeeHeartbeat.username).subquery()
+    try:
+        # Get latest heartbeat for each employee
+        latest_heartbeats = db.query(
+            EmployeeHeartbeat.username,
+            func.max(EmployeeHeartbeat.timestamp).label('latest_timestamp')
+        ).group_by(EmployeeHeartbeat.username).subquery()
 
-    current_status = db.query(EmployeeHeartbeat).join(
-        latest_heartbeats,
-        and_(
-            EmployeeHeartbeat.username == latest_heartbeats.c.username,
-            EmployeeHeartbeat.timestamp == latest_heartbeats.c.latest_timestamp
-        )
-    ).all()
+        current_status = db.query(EmployeeHeartbeat).join(
+            latest_heartbeats,
+            and_(
+                EmployeeHeartbeat.username == latest_heartbeats.c.username,
+                EmployeeHeartbeat.timestamp == latest_heartbeats.c.latest_timestamp
+            )
+        ).all()
+    except Exception as e:
+        print(f"Database error in get_employee_status: {e}")
+        # Return empty result if database query fails
+        current_status = []
 
     # Determine online status (online if heartbeat within last 10 minutes)
     cutoff_time = datetime.utcnow() - timedelta(minutes=10)

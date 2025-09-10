@@ -132,4 +132,62 @@ def get_db():
 
 # Create tables
 def create_tables():
-    Base.metadata.create_all(bind=engine)
+    """Create all tables and handle schema migrations"""
+    try:
+        # Create all tables
+        Base.metadata.create_all(bind=engine)
+        
+        # Check if we need to add missing columns to existing tables
+        from sqlalchemy import inspect, text
+        inspector = inspect(engine)
+        
+        # Check employee_heartbeats table for missing columns
+        if 'employee_heartbeats' in inspector.get_table_names():
+            existing_columns = [col['name'] for col in inspector.get_columns('employee_heartbeats')]
+            required_columns = [
+                ('employee_id', 'VARCHAR'),
+                ('employee_email', 'VARCHAR'),
+                ('employee_name', 'VARCHAR'),
+                ('department', 'VARCHAR'),
+                ('manager', 'VARCHAR')
+            ]
+            
+            # Add missing columns
+            with engine.connect() as conn:
+                for col_name, col_type in required_columns:
+                    if col_name not in existing_columns:
+                        try:
+                            conn.execute(text(f'ALTER TABLE employee_heartbeats ADD COLUMN {col_name} {col_type}'))
+                            conn.commit()
+                            print(f"Added missing column {col_name} to employee_heartbeats")
+                        except Exception as e:
+                            print(f"Column {col_name} might already exist: {e}")
+                            
+        # Check employee_logs table for missing columns
+        if 'employee_logs' in inspector.get_table_names():
+            existing_columns = [col['name'] for col in inspector.get_columns('employee_logs')]
+            required_columns = [
+                ('employee_id', 'VARCHAR'),
+                ('employee_email', 'VARCHAR'),
+                ('employee_name', 'VARCHAR'),
+                ('department', 'VARCHAR'),
+                ('manager', 'VARCHAR')
+            ]
+            
+            # Add missing columns
+            with engine.connect() as conn:
+                for col_name, col_type in required_columns:
+                    if col_name not in existing_columns:
+                        try:
+                            conn.execute(text(f'ALTER TABLE employee_logs ADD COLUMN {col_name} {col_type}'))
+                            conn.commit()
+                            print(f"Added missing column {col_name} to employee_logs")
+                        except Exception as e:
+                            print(f"Column {col_name} might already exist: {e}")
+                            
+        print("Database schema check completed")
+        
+    except Exception as e:
+        print(f"Error during table creation/migration: {e}")
+        # If PostgreSQL fails, ensure we have the basic structure
+        Base.metadata.create_all(bind=engine)

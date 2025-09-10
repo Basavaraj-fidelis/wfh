@@ -30,7 +30,17 @@ const DashboardSection: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setError(null);
-      const response = await axios.get('/api/admin/employees/status');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        logout();
+        return;
+      }
+      
+      const response = await axios.get('/api/admin/employees/status', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       setEmployees(response.data.employees || []);
     } catch (error: any) {
       console.error('Failed to load dashboard data:', error);
@@ -38,8 +48,10 @@ const DashboardSection: React.FC = () => {
         logout();
       } else if (error.response?.status === 403) {
         setError('Access denied. Please check your authentication.');
+      } else if (error.response?.status === 500) {
+        setError('Server error. Database might be initializing. Please wait a moment and try again.');
       } else {
-        setError('Failed to load dashboard data. Please try refreshing the page.');
+        setError('Failed to load dashboard data. Please check your network connection.');
       }
     } finally {
       setLoading(false);
