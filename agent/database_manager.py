@@ -53,6 +53,11 @@ class DatabaseManager:
                             timestamp TEXT NOT NULL,
                             username TEXT NOT NULL,
                             hostname TEXT NOT NULL,
+                            employee_id TEXT,
+                            employee_email TEXT,
+                            employee_name TEXT,
+                            department TEXT,
+                            manager TEXT,
                             status TEXT NOT NULL DEFAULT 'online',
                             location_data TEXT,
                             sent_to_server BOOLEAN DEFAULT FALSE,
@@ -64,6 +69,11 @@ class DatabaseManager:
                             timestamp TEXT NOT NULL,
                             username TEXT NOT NULL,
                             hostname TEXT NOT NULL,
+                            employee_id TEXT,
+                            employee_email TEXT,
+                            employee_name TEXT,
+                            department TEXT,
+                            manager TEXT,
                             source TEXT NOT NULL,
                             activity_data TEXT NOT NULL,
                             productivity_hours REAL DEFAULT 0,
@@ -104,8 +114,8 @@ class DatabaseManager:
             logging.error(f"Database initialization error: {e}")
             raise
             
-    def store_heartbeat(self, username: str, hostname: str, status: str = "online", 
-                       location_data: Optional[Dict[str, Any]] = None) -> Optional[int]:
+    def store_heartbeat(self, username: str, hostname: str, employee_info: Dict[str, str], 
+                       status: str = "online", location_data: Optional[Dict[str, Any]] = None) -> Optional[int]:
         """Store heartbeat data with proper error handling"""
         try:
             with self._lock:
@@ -115,9 +125,13 @@ class DatabaseManager:
                     location_json = json.dumps(location_data) if location_data else None
                     
                     cursor = conn.execute('''
-                        INSERT INTO heartbeats (timestamp, username, hostname, status, location_data, sent_to_server)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ''', (timestamp, username, hostname, status, location_json, False))
+                        INSERT INTO heartbeats (timestamp, username, hostname, employee_id, employee_email, 
+                                              employee_name, department, manager, status, location_data, sent_to_server)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (timestamp, username, hostname, employee_info.get('employee_id', ''),
+                          employee_info.get('employee_email', ''), employee_info.get('employee_name', ''),
+                          employee_info.get('department', ''), employee_info.get('manager', ''),
+                          status, location_json, False))
                     
                     record_id = cursor.lastrowid
                     logging.debug(f"Heartbeat stored with ID: {record_id}")
@@ -130,8 +144,8 @@ class DatabaseManager:
             logging.error(f"Error storing heartbeat: {e}")
             return None
             
-    def store_activity_data(self, username: str, hostname: str, source: str, 
-                           activity_data: Dict[str, Any], productivity_hours: float = 0,
+    def store_activity_data(self, username: str, hostname: str, employee_info: Dict[str, str], 
+                           source: str, activity_data: Dict[str, Any], productivity_hours: float = 0,
                            screenshot_path: Optional[str] = None,
                            location_data: Optional[Dict[str, Any]] = None) -> Optional[int]:
         """Store activity data with proper error handling"""
@@ -144,11 +158,14 @@ class DatabaseManager:
                     location_json = json.dumps(location_data) if location_data else None
                     
                     cursor = conn.execute('''
-                        INSERT INTO activity_data (timestamp, username, hostname, source, activity_data, 
+                        INSERT INTO activity_data (timestamp, username, hostname, employee_id, employee_email, 
+                                                 employee_name, department, manager, source, activity_data, 
                                                  productivity_hours, screenshot_path, location_data, sent_to_server)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ''', (timestamp, username, hostname, source, activity_json, productivity_hours, 
-                          screenshot_path, location_json, False))
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (timestamp, username, hostname, employee_info.get('employee_id', ''),
+                          employee_info.get('employee_email', ''), employee_info.get('employee_name', ''),
+                          employee_info.get('department', ''), employee_info.get('manager', ''),
+                          source, activity_json, productivity_hours, screenshot_path, location_json, False))
                     
                     record_id = cursor.lastrowid
                     logging.debug(f"Activity data stored with ID: {record_id}")
@@ -168,7 +185,8 @@ class DatabaseManager:
                 conn = self._get_connection()
                 try:
                     cursor = conn.execute('''
-                        SELECT id, timestamp, username, hostname, status, location_data
+                        SELECT id, timestamp, username, hostname, employee_id, employee_email, 
+                               employee_name, department, manager, status, location_data
                         FROM heartbeats 
                         WHERE sent_to_server = FALSE 
                         ORDER BY timestamp ASC 
@@ -193,7 +211,8 @@ class DatabaseManager:
                 conn = self._get_connection()
                 try:
                     cursor = conn.execute('''
-                        SELECT id, timestamp, username, hostname, source, activity_data, 
+                        SELECT id, timestamp, username, hostname, employee_id, employee_email, 
+                               employee_name, department, manager, source, activity_data, 
                                productivity_hours, screenshot_path, location_data
                         FROM activity_data 
                         WHERE sent_to_server = FALSE 

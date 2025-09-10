@@ -50,6 +50,13 @@ class ConfigManager:
     def _get_default_config(self) -> Dict[str, Any]:
         """Return default configuration"""
         return {
+            "employee": {
+                "employee_id": os.getenv("WFH_EMPLOYEE_ID", ""),
+                "employee_email": os.getenv("WFH_EMPLOYEE_EMAIL", ""),
+                "employee_name": os.getenv("WFH_EMPLOYEE_NAME", ""),
+                "department": os.getenv("WFH_EMPLOYEE_DEPARTMENT", ""),
+                "manager": os.getenv("WFH_EMPLOYEE_MANAGER", "")
+            },
             "server": {
                 "url": os.getenv("WFH_SERVER_URL", "http://localhost:8000"),
                 "auth_token": os.getenv("WFH_AUTH_TOKEN", "agent-secret-token-change-this"),
@@ -118,6 +125,17 @@ class ConfigManager:
     def get_auth_token(self) -> str:
         """Get authentication token"""
         return self.get("server", "auth_token")
+        
+    def get_employee_info(self) -> Dict[str, str]:
+        """Get employee identification information"""
+        employee_section = self.get_section("employee")
+        return {
+            "employee_id": employee_section.get("employee_id", ""),
+            "employee_email": employee_section.get("employee_email", ""),
+            "employee_name": employee_section.get("employee_name", ""),
+            "department": employee_section.get("department", ""),
+            "manager": employee_section.get("manager", "")
+        }
         
     def save_config(self, config_dict: Dict[str, Any]) -> None:
         """Save configuration to file"""

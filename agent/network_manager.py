@@ -105,11 +105,17 @@ class NetworkManager:
         except Exception as e:
             return False, f"Connection test failed: {str(e)}"
             
-    def send_heartbeat(self, username: str, hostname: str, status: str = "online") -> Tuple[bool, str]:
+    def send_heartbeat(self, username: str, hostname: str, employee_info: Dict[str, str], 
+                      status: str = "online") -> Tuple[bool, str]:
         """Send heartbeat to server with retry logic"""
         heartbeat_data = {
             'username': username,
             'hostname': hostname,
+            'employee_id': employee_info.get('employee_id', ''),
+            'employee_email': employee_info.get('employee_email', ''),
+            'employee_name': employee_info.get('employee_name', ''),
+            'department': employee_info.get('department', ''),
+            'manager': employee_info.get('manager', ''),
             'status': status
         }
         
@@ -119,8 +125,8 @@ class NetworkManager:
             method='POST'
         )
         
-    def send_detailed_log(self, username: str, hostname: str, activity_data: Dict[str, Any],
-                         screenshot_path: Optional[str] = None) -> Tuple[bool, str]:
+    def send_detailed_log(self, username: str, hostname: str, employee_info: Dict[str, str],
+                         activity_data: Dict[str, Any], screenshot_path: Optional[str] = None) -> Tuple[bool, str]:
         """Send detailed activity log to server with screenshot"""
         try:
             location_data = self._get_location_data()
@@ -129,6 +135,11 @@ class NetworkManager:
             form_data = {
                 'username': username,
                 'hostname': hostname,
+                'employee_id': employee_info.get('employee_id', ''),
+                'employee_email': employee_info.get('employee_email', ''),
+                'employee_name': employee_info.get('employee_name', ''),
+                'department': employee_info.get('department', ''),
+                'manager': employee_info.get('manager', ''),
                 'local_ip': location_data.get('local_ip', 'unknown'),
                 'public_ip': location_data.get('public_ip', 'unknown'),
                 'location': json.dumps(location_data),
@@ -298,9 +309,18 @@ class NetworkManager:
             # Sync heartbeats
             heartbeats = self.db.get_unsent_heartbeats()
             for heartbeat in heartbeats:
-                hb_id, timestamp, hb_username, hb_hostname, status, location_data = heartbeat
+                (hb_id, timestamp, hb_username, hb_hostname, employee_id, employee_email, 
+                 employee_name, department, manager, status, location_data) = heartbeat
                 
-                success, message = self.send_heartbeat(hb_username, hb_hostname, status)
+                employee_info = {
+                    'employee_id': employee_id or '',
+                    'employee_email': employee_email or '',
+                    'employee_name': employee_name or '',
+                    'department': department or '',
+                    'manager': manager or ''
+                }
+                
+                success, message = self.send_heartbeat(hb_username, hb_hostname, employee_info, status)
                 
                 if success:
                     self.db.mark_as_sent('heartbeats', hb_id)
@@ -313,8 +333,17 @@ class NetworkManager:
             # Sync activity data
             activity_logs = self.db.get_unsent_activity_data()
             for activity_log in activity_logs:
-                (log_id, timestamp, act_username, act_hostname, source, 
-                 activity_data_str, productivity_hours, screenshot_path, location_data) = activity_log
+                (log_id, timestamp, act_username, act_hostname, employee_id, employee_email, 
+                 employee_name, department, manager, source, activity_data_str, 
+                 productivity_hours, screenshot_path, location_data) = activity_log
+                
+                employee_info = {
+                    'employee_id': employee_id or '',
+                    'employee_email': employee_email or '',
+                    'employee_name': employee_name or '',
+                    'department': department or '',
+                    'manager': manager or ''
+                }
                 
                 try:
                     activity_data = json.loads(activity_data_str)
@@ -326,7 +355,7 @@ class NetworkManager:
                     continue
                 
                 success, message = self.send_detailed_log(
-                    act_username, act_hostname, activity_data, screenshot_path
+                    act_username, act_hostname, employee_info, activity_data, screenshot_path
                 )
                 
                 if success:

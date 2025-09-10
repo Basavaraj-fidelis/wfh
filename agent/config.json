@@ -1,4 +1,11 @@
 {
+  "employee": {
+    "employee_id": "${WFH_EMPLOYEE_ID}",
+    "employee_email": "${WFH_EMPLOYEE_EMAIL}",
+    "employee_name": "${WFH_EMPLOYEE_NAME}",
+    "department": "${WFH_EMPLOYEE_DEPARTMENT}",
+    "manager": "${WFH_EMPLOYEE_MANAGER}"
+  },
   "server": {
     "url": "${WFH_SERVER_URL}",
     "auth_token": "${WFH_AUTH_TOKEN}",

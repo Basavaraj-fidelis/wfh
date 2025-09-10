@@ -32,6 +32,7 @@ class MonitoringAgent:
         # Get user information
         self.username = getpass.getuser()
         self.hostname = socket.gethostname()
+        self.employee_info = self.config.get_employee_info()
         self.is_running = False
         
         # Initialize managers
@@ -158,6 +159,7 @@ class MonitoringAgent:
             record_id = self.db.store_heartbeat(
                 username=self.username,
                 hostname=self.hostname,
+                employee_info=self.employee_info,
                 status="online"
             )
             
@@ -184,6 +186,7 @@ class MonitoringAgent:
             record_id = self.db.store_activity_data(
                 username=self.username,
                 hostname=self.hostname,
+                employee_info=self.employee_info,
                 source="activitywatch_v2",
                 activity_data=activity_data,
                 productivity_hours=activity_data.get('total_active_time_minutes', 0) / 60,

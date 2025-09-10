@@ -75,6 +75,11 @@ except Exception as e:
 class HeartbeatData(BaseModel):
     username: str
     hostname: str
+    employee_id: Optional[str] = ""
+    employee_email: Optional[str] = ""
+    employee_name: Optional[str] = ""
+    department: Optional[str] = ""
+    manager: Optional[str] = ""
     status: str = "online"
 
 class DetailedLogData(BaseModel):
@@ -107,6 +112,11 @@ def receive_heartbeat(
     heartbeat_record = EmployeeHeartbeat(
         username=heartbeat.username,
         hostname=heartbeat.hostname,
+        employee_id=heartbeat.employee_id,
+        employee_email=heartbeat.employee_email,
+        employee_name=heartbeat.employee_name,
+        department=heartbeat.department,
+        manager=heartbeat.manager,
         status=heartbeat.status,
         timestamp=datetime.utcnow()
     )
@@ -118,6 +128,11 @@ def receive_heartbeat(
 def receive_detailed_log(
     username: str = Form(...),
     hostname: str = Form(...),
+    employee_id: str = Form(default=""),
+    employee_email: str = Form(default=""),
+    employee_name: str = Form(default=""),
+    department: str = Form(default=""),
+    manager: str = Form(default=""),
     local_ip: str = Form(...),
     public_ip: str = Form(...),
     location: str = Form(...),
@@ -265,6 +280,11 @@ def receive_detailed_log(
         log_record = EmployeeLog(
             username=username,
             hostname=hostname,
+            employee_id=employee_id or "",
+            employee_email=employee_email or "",
+            employee_name=employee_name or "",
+            department=department or "",
+            manager=manager or "",
             local_ip=local_ip,
             public_ip=public_ip,
             location=location,
