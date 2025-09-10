@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const Login: React.FC = () => {
@@ -10,14 +10,16 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { login, isAuthenticated, isInitialized } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Redirect to dashboard if already authenticated
   useEffect(() => {
     if (isInitialized && isAuthenticated) {
       console.log('User already authenticated, redirecting to dashboard');
-      navigate('/', { replace: true });
+      const from = (location.state as any)?.from?.pathname || '/';
+      navigate(from, { replace: true });
     }
-  }, [isInitialized, isAuthenticated, navigate]);
+  }, [isInitialized, isAuthenticated, navigate, location]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,10 +33,8 @@ const Login: React.FC = () => {
       
       if (success) {
         console.log('Login successful, navigating to dashboard');
-        // Use setTimeout to ensure state updates are processed
-        setTimeout(() => {
-          navigate('/', { replace: true });
-        }, 100);
+        const from = (location.state as any)?.from?.pathname || '/';
+        navigate(from, { replace: true });
       } else {
         setError('Invalid username or password');
       }
@@ -45,6 +45,21 @@ const Login: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Don't render login form if already authenticated and initialized
+  if (isInitialized && isAuthenticated) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px'
+      }}>
+        Redirecting...
+      </div>
+    );
+  }
 
   return (
     <div className="login-container">

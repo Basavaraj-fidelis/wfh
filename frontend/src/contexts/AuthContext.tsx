@@ -58,13 +58,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
         // Validate token before setting
         if (isTokenValid(newToken)) {
-          // Set the token first
+          // Set the token in localStorage first
           localStorage.setItem('adminToken', newToken);
-
-          // Update axios defaults immediately for this session
+          
+          // Set axios defaults
           axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
 
-          // Then update state
+          // Update state
           setToken(newToken);
 
           console.log('Login successful, token set');
@@ -83,48 +83,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = () => {
+    console.log('Logging out...');
     setToken(null);
     localStorage.removeItem('adminToken');
     delete axios.defaults.headers.common['Authorization'];
   };
 
-  const isAuthenticated = !!token && isTokenValid(token);
-
-  // Initialize token from localStorage
-  React.useEffect(() => {
-    const savedToken = localStorage.getItem('adminToken');
-    if (savedToken && isTokenValid(savedToken)) {
-      setToken(savedToken);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-    } else if (savedToken) {
-      localStorage.removeItem('adminToken');
-    }
-    setIsInitialized(true);
-  }, []);
-
-  // Token validation effect
+  // Initialize authentication state
   useEffect(() => {
-    if (token && !isTokenValid(token)) {
-      logout();
-    }
-  }, [token]);
+    const initializeAuth = () => {
+      const savedToken = localStorage.getItem('adminToken');
+      console.log('Initializing auth, saved token:', !!savedToken);
+      
+      if (savedToken && isTokenValid(savedToken)) {
+        console.log('Token is valid, setting auth state');
+        setToken(savedToken);
+        axios.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+      } else if (savedToken) {
+        console.log('Token is invalid, removing');
+        localStorage.removeItem('adminToken');
+      }
+      
+      setIsInitialized(true);
+    };
+
+    initializeAuth();
+  }, []);
 
   // Setup axios interceptors
   useEffect(() => {
-    const requestInterceptor = axios.interceptors.request.use(
-      (config) => {
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => Promise.reject(error)
-    );
-
     const responseInterceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
+          console.log('401 error, logging out');
           logout();
         }
         return Promise.reject(error);
@@ -132,10 +124,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     return () => {
-      axios.interceptors.request.eject(requestInterceptor);
       axios.interceptors.response.eject(responseInterceptor);
     };
-  }, [token]);
+  }, []);
+
+  const isAuthenticated = token !== null && isTokenValid(token);
+
+  console.log('AuthContext state:', { 
+    hasToken: !!token, 
+    isAuthenticated, 
+    isInitialized 
+  });
 
   return (
     <AuthContext.Provider value={{ token, login, logout, isAuthenticated, isInitialized }}>
